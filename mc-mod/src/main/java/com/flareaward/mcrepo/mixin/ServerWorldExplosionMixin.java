@@ -1,14 +1,14 @@
 package com.flareaward.mcrepo.mixin;
 
 import com.flareaward.mcrepo.BridgeServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.PrimedTnt;
+import net.minecraft.world.entity.item.PrimedTnt;
+import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Bonus coverage on top of the dedicated TNT hook: reports every other kind of
@@ -21,12 +21,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * working through TntEntityExplosionMixin.
  *
  * Target (official mappings, Minecraft 1.21.1):
- *   ServerLevel#createExplosion(Entity, double, double, double, float, boolean, Level.ExplosionInteraction)
+ *   Level#explode(Entity, double, double, double, float, boolean, Level.ExplosionInteraction)
  */
-@Mixin(ServerLevel.class)
+@Mixin(Level.class)
 public abstract class ServerWorldExplosionMixin {
     @Inject(
-            method = "createExplosion(Lnet/minecraft/world/entity/Entity;DDDFFZLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;",
+            method = "explode(Lnet/minecraft/world/entity/Entity;DDDFFZLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;",
             at = @At("HEAD"))
     private void mcrepo$broadcastExplosion(
             Entity entity,
@@ -36,9 +36,10 @@ public abstract class ServerWorldExplosionMixin {
             float power,
             boolean createFire,
             Level.ExplosionInteraction interactionType,
-            CallbackInfo ci) {
-        if (entity instanceof PrimedTnt) {
-            return; // already reported by TntEntityExplosionMixin
+            CallbackInfoReturnable<Explosion> cir) {
+        Level self = (Level) (Object) this;
+        if (self.isClientSide || entity instanceof PrimedTnt) {
+            return; // client echo or already reported by TntEntityExplosionMixin
         }
         String source = interactionType == null
                 ? "generic"

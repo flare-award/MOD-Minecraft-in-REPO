@@ -107,7 +107,7 @@ jobs:
               cat gradle.properties
             } > /tmp/diag.txt 2>&1
             # Packed annotations (GitHub caps the count, so few + multi-line).
-            root=$(grep -E 'FAILURE:|What went wrong|Caused by:|Could not resolve|Could not find|error:' /tmp/gradle-build.log | head -n 5 | sed ':a;N;$!ba;s/\n/%0A/g')
+            root=$(grep -A2 -E 'FAILURE:|What went wrong|Caused by:|Could not resolve|Could not find|error:|warning:.*Mixin' /tmp/gradle-build.log | head -n 60 | sed ':a;N;$!ba;s/\n/%0A/g')
             taillog=$(tail -n 25 /tmp/gradle-build.log | sed ':a;N;$!ba;s/\n/%0A/g')
             echo "::error::BUILD FAILED - root lines + log tail:%0A${root}%0A---%0A${taillog}"
             probe=$(sed -n '/===== deobf jar probe/,/===== compileClasspath tree/p' /tmp/diag.txt | head -n 45 | sed ':a;N;$!ba;s/\n/%0A/g')

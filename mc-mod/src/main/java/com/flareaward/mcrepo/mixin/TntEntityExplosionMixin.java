@@ -1,7 +1,7 @@
 package com.flareaward.mcrepo.mixin;
 
 import com.flareaward.mcrepo.BridgeServer;
-import net.minecraft.world.entity.PrimedTnt;
+import net.minecraft.world.entity.item.PrimedTnt;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

@@ -16,7 +16,7 @@ import net.minecraft.world.phys.Vec3;
  * (flying, invulnerable, no gravity, no clip, zeroed input) so vanilla physics
  * never fights the camera.
  *
- * Written against Mojang's official mappings (loom 1.18+ default).
+ * Written against Mojang's official mappings.
  */
 public final class CameraSync {
     /** How long a pose is considered fresh before we stop driving the camera. */
@@ -177,7 +177,7 @@ public final class CameraSync {
         player.fallDistance = 0.0f;
         player.noPhysics = true;
         player.setNoGravity(true);
-        player.getAbilities().canFly = true;
+        player.getAbilities().mayfly = true;
         player.getAbilities().flying = true;
         player.getAbilities().invulnerable = true;
         // Neutralize keyboard/WASD so the player cannot fight the camera.
@@ -200,13 +200,13 @@ public final class CameraSync {
             }
         }
         try {
-            client.options.getCameraType().setValue(CameraType.FIRST_PERSON);
+            client.options.setCameraType(CameraType.FIRST_PERSON);
         } catch (Throwable t) {
             McRepoBridge.LOGGER.debug("Could not force first person view: {}", t.toString());
         }
 
         if (config.requestCreativeMode) {
-            MinecraftServer server = client.getServer();
+            MinecraftServer server = client.getSingleplayerServer();
             if (server != null) {
                 try {
                     server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode creative");
@@ -235,7 +235,7 @@ public final class CameraSync {
         }
         try {
             // Minecraft's FOV slider maps roughly 1:1 to the real vertical FOV at 70.
-            client.options.getFov().setValue((int) Math.round(fov));
+            client.options.fov().set((int) Math.round(fov));
         } catch (Throwable t) {
             McRepoBridge.LOGGER.debug("Could not sync FOV: {}", t.toString());
         }
