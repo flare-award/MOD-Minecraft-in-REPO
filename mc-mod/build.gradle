@@ -1,24 +1,19 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
 }
 
 // NOTE: this mod intentionally has NO fabric-api dependency. Every hook is a
 // plain Mixin, so the mod keeps working across Fabric API releases.
 //
-// Since loom 1.18 the default mappings are Mojang's official mappings and the
-// loader dependency is injected by loom - the sources are written against
-// official names (Minecraft, LocalPlayer, PrimedTnt, ServerLevel, ...).
+// In Loom 1.18+, `net.fabricmc.fabric-loom-remap` is the remapping plugin for
+// obfuscated Minecraft versions (such as 1.21.1), paired with
+// `loom.officialMojangMappings()`.
 
 dependencies {
 	// To change the version see gradle.properties
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	// Mojang's official mappings (the mod sources use official names).
-	// Without this line current loom leaves 1.21.1 obfuscated.
 	mappings loom.officialMojangMappings()
-	// Provides the loader + Mixin classes on the compile classpath.
-	// (The example template gets these transitively via fabric-api; this mod
-	// intentionally skips fabric-api, so it declares the loader itself.)
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 }
 
 processResources {
