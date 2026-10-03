@@ -76,18 +76,15 @@ jobs:
           fi
           tail -n 300 /tmp/gradle-build.log
           if [ "$status" -ne 0 ]; then
-            echo "Gradle build failed - extracting the root cause into annotations"
-            awk '
-              /FAILURE:|What went wrong|Caused by:|error:|cannot find symbol|Could not resolve|Could not find/ {
-                print; hits++
-                next
-              }
-              hits > 0 && hits < 40 && /^[[:space:]]/ { print; hits++ }
-            ' /tmp/gradle-build.log | head -n 80 | sed 's/^/::error::/'
-            echo "::error::--- compile classpath dump follows ---"
-            ./gradlew -q dependencies --configuration compileClasspath 2>&1 | head -n 60 | sed 's/^/::error::/' || true
-            echo "::error::--- minecraft artifacts in gradle cache ---"
-            find ~/.gradle -iname "*minecraft*1.21.1*" -maxdepth 8 2>/dev/null | head -n 20 | sed 's/^/::error::/' || true
+            # Annotations are capped, so pack each diagnostic into ONE
+            # multi-line annotation using %0A newline escapes.
+            echo "Gradle build failed - packing diagnostics into annotations"
+            root=$(grep -E 'FAILURE:|What went wrong|Caused by:|Could not resolve|Could not find|error:' /tmp/gradle-build.log | head -n 8 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::ROOT-CAUSE LINES:%0A${root}"
+            cp=$(./gradlew -q dependencies --configuration compileClasspath 2>&1 | head -n 50 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::COMPILE CLASSPATH:%0A${cp}"
+            cache=$(find ~/.gradle -iname "*minecraft*" -maxdepth 8 2>/dev/null | head -n 25 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::GRADLE CACHE MINECRAFT FILES:%0A${cache}"
           fi
           exit "$status"
       - uses: actions/upload-artifact@v4
