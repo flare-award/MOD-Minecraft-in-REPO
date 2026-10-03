@@ -12,6 +12,10 @@ plugins {
 dependencies {
 	// To change the version see gradle.properties
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	// Provides the loader + Mixin classes on the compile classpath.
+	// (The example template gets these transitively via fabric-api; this mod
+	// intentionally skips fabric-api, so it declares the loader itself.)
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 }
 
 processResources {

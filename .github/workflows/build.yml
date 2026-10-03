@@ -53,15 +53,19 @@ jobs:
                              # the mod itself still targets Java 21 (options.release)
       - name: Make gradlew executable
         run: chmod +x gradlew
-      - name: Resolve current fabric-loom version
+      - name: Resolve current fabric-loom / fabric-loader versions
         shell: bash
         run: |
           set -e
           loom=$(curl -fsSL https://maven.fabricmc.net/net/fabricmc/fabric-loom/maven-metadata.xml \
             | grep -oE '<version>[^<]+-SNAPSHOT</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1 || true)
-          echo "Resolved loom: ${loom:-pinned}"
+          loader=$(curl -fsSL https://maven.fabricmc.net/net/fabricmc/fabric-loader/maven-metadata.xml \
+            | grep -oE '<version>[^<]+</version>' | sed 's/<[^>]*>//g' \
+            | grep -vE 'beta|rc|pre' | sort -V | tail -1 || true)
+          echo "Resolved: loom=${loom:-pinned} loader=${loader:-pinned}"
           [ -n "$loom" ] && echo "loom_version=$loom" >> gradle.properties
-          tail -n 4 gradle.properties
+          [ -n "$loader" ] && echo "loader_version=$loader" >> gradle.properties
+          tail -n 5 gradle.properties
       - name: Build with Loom
         shell: bash
         run: |
