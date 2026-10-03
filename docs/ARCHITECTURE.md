@@ -112,14 +112,14 @@ Required config (`mcrepo.mixins.json`):
 | Mixin | Target | Notes |
 |---|---|---|
 | MinecraftClientTickMixin | `Minecraft.tick()V` | 20 Hz camera/ability update, player snapshot |
-| GameRendererCameraMixin | `GameRenderer.render(FJZ)V` | per-frame camera application |
+| GameRendererCameraMixin | `GameRenderer.render(LDeltaTracker;Z)V` | per-frame camera application |
 | TntEntityExplosionMixin | `PrimedTnt.explode()V` | stable no-arg signature; power read reflectively |
 
 Optional config (`mcrepo.optional.mixins.json`, `required:false`):
 
 | Mixin | Target | Notes |
 |---|---|---|
-| ServerWorldExplosionMixin | `ServerLevel.createExplosion(Entity,DDDFFZLLevel$ExplosionInteraction;)` | all non-TNT explosions |
+| ServerWorldExplosionMixin | `Level.explode(Entity,DDDFFZLLevel$ExplosionInteraction;)LExplosion;` | all non-TNT explosions |
 | IgnorePositionCorrectionMixin | `ClientPacketListener.handleMovePlayer` | suppress rubber-banding |
 
 If the optional targets rename in a newer game version, that config is

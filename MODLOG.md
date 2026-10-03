@@ -118,8 +118,15 @@ Rejected alternatives:
   CI now resolves the newest loom snapshot from maven metadata at run time.
 - Round 3: loom 1.18-SNAPSHOT requires JVM 25; CI runs Gradle on JDK 25
   (mod bytecode still targets Java 21 via options.release).
-- Round 4: loom 1.18 removed the yarn `mappings` configuration and defaults
-  to Mojang official mappings. All Java sources were rewritten to official
-  names (Minecraft/LocalPlayer/PrimedTnt/ServerLevel/ClientPacketListener,
-  setYRot/setXRot/noPhysics/xOld..., abilities.canFly, options.hideGui,
-  getCommands().performPrefixedCommand, handleMovePlayer).
+- Round 4: loom 1.18 split the plugin into `net.fabricmc.fabric-loom`
+  (non-obfuscated MC 26+) and `net.fabricmc.fabric-loom-remap` (obfuscated
+  versions like 1.21.1, paired with `mappings loom.officialMojangMappings()`
+  and `modImplementation "net.fabricmc:fabric-loader:..."`). All Java sources
+  use Mojang official names (`Minecraft`, `LocalPlayer`, `PrimedTnt` in
+  `net.minecraft.world.entity.item`, `Level.explode`, `GameRenderer.render(DeltaTracker, boolean)`,
+  `ClientPacketListener.handleMovePlayer`, `setYRot`/`setXRot`/`noPhysics`/`xOld`,
+  `abilities.mayfly`, `options.hideGui`/`setCameraType`/`fov().set(...)`,
+  `getSingleplayerServer()`, `getCommands().performPrefixedCommand`).
+- Round 5: all three CI jobs (`repo-mod-stubs`, `repo-mod-gamelibs`, `mc-mod`)
+  compiled cleanly and produced artifacts (`MinecraftInRepo.dll` and
+  `mcrepo-1.0.0.jar`).
