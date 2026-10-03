@@ -81,8 +81,14 @@ jobs:
             echo "Gradle build failed - packing diagnostics into annotations"
             root=$(grep -E 'FAILURE:|What went wrong|Caused by:|Could not resolve|Could not find|error:' /tmp/gradle-build.log | head -n 8 | sed ':a;N;$!ba;s/\n/%0A/g')
             echo "::error::ROOT-CAUSE LINES:%0A${root}"
-            cp=$(./gradlew -q dependencies --configuration compileClasspath 2>&1 | head -n 50 | sed ':a;N;$!ba;s/\n/%0A/g')
-            echo "::error::COMPILE CLASSPATH:%0A${cp}"
+            insight=$(./gradlew -q dependencyInsight --dependency minecraft --configuration compileClasspath 2>&1 | head -n 40 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::MINECRAFT DEPENDENCY INSIGHT (compileClasspath):%0A${insight}"
+            jar=$(find ~/.gradle/caches/fabric-loom/minecraftMaven -name "*deobf*1.21.1.jar" 2>/dev/null | head -1)
+            probe="jar=$jar"
+            if [ -n "$jar" ]; then
+              probe="$probe%0A$(unzip -l "$jar" 2>/dev/null | grep -cE '\.class$') classes total%0A$(unzip -l "$jar" 2>/dev/null | grep -E 'net/minecraft/client/Minecraft\.class|client/renderer/GameRenderer\.class|world/entity/PrimedTnt\.class|server/level/ServerLevel\.class' | head -8)"
+            fi
+            echo "::error::DEOBF JAR PROBE:%0A${probe}"
             cache=$(find ~/.gradle -iname "*minecraft*" -maxdepth 8 2>/dev/null | head -n 25 | sed ':a;N;$!ba;s/\n/%0A/g')
             echo "::error::GRADLE CACHE MINECRAFT FILES:%0A${cache}"
           fi
