@@ -53,22 +53,15 @@ jobs:
                              # the mod itself still targets Java 21 (options.release)
       - name: Make gradlew executable
         run: chmod +x gradlew
-      - name: Resolve current Fabric toolchain versions
+      - name: Resolve current fabric-loom version
         shell: bash
         run: |
           set -e
           loom=$(curl -fsSL https://maven.fabricmc.net/net/fabricmc/fabric-loom/maven-metadata.xml \
             | grep -oE '<version>[^<]+-SNAPSHOT</version>' | sed 's/<[^>]*>//g' | sort -V | tail -1 || true)
-          yarn=$(curl -fsSL https://maven.fabricmc.net/net/fabricmc/yarn/maven-metadata.xml \
-            | grep -oE '1\.21\.1\+build\.[0-9]+' | sort -V | tail -1 || true)
-          loader=$(curl -fsSL https://maven.fabricmc.net/net/fabricmc/fabric-loader/maven-metadata.xml \
-            | grep -oE '<version>[^<]+</version>' | sed 's/<[^>]*>//g' \
-            | grep -vE 'beta|rc' | sort -V | tail -1 || true)
-          echo "Resolved: loom=${loom:-pinned} yarn=${yarn:-pinned} loader=${loader:-pinned}"
+          echo "Resolved loom: ${loom:-pinned}"
           [ -n "$loom" ] && echo "loom_version=$loom" >> gradle.properties
-          [ -n "$yarn" ] && echo "yarn_mappings=$yarn" >> gradle.properties
-          [ -n "$loader" ] && echo "loader_version=$loader" >> gradle.properties
-          tail -n 6 gradle.properties
+          tail -n 4 gradle.properties
       - name: Build with Loom
         shell: bash
         run: |

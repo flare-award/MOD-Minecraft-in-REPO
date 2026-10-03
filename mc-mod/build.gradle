@@ -4,12 +4,14 @@ plugins {
 
 // NOTE: this mod intentionally has NO fabric-api dependency. Every hook is a
 // plain Mixin, so the mod keeps working across Fabric API releases.
+//
+// Since loom 1.18 the default mappings are Mojang's official mappings and the
+// loader dependency is injected by loom - the sources are written against
+// official names (Minecraft, LocalPlayer, PrimedTnt, ServerLevel, ...).
 
 dependencies {
-	// To change the versions see the gradle.properties file
+	// To change the version see gradle.properties
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 }
 
 processResources {

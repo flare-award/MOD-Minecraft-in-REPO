@@ -107,3 +107,19 @@ Rejected alternatives:
 - `docs/ARCHITECTURE.md`, `README.md`, CI workflow.
 - Status: **in-progress** — code complete, pending CI compile results and
   in-game verification by a human with both games installed.
+
+## CI iteration notes (same session)
+
+- Round 1 (stubs only were not enough): compiling against the real
+  R.E.P.O.GameLibs.Steam assemblies caught `GUIStyleState.color` → the real
+  property is `textColor`; also a `yield return` inside try/catch in the
+  connect coroutine. Both fixed.
+- Round 2: fabric-loom 1.9-SNAPSHOT no longer exists on maven.fabricmc.net.
+  CI now resolves the newest loom snapshot from maven metadata at run time.
+- Round 3: loom 1.18-SNAPSHOT requires JVM 25; CI runs Gradle on JDK 25
+  (mod bytecode still targets Java 21 via options.release).
+- Round 4: loom 1.18 removed the yarn `mappings` configuration and defaults
+  to Mojang official mappings. All Java sources were rewritten to official
+  names (Minecraft/LocalPlayer/PrimedTnt/ServerLevel/ClientPacketListener,
+  setYRot/setXRot/noPhysics/xOld..., abilities.canFly, options.hideGui,
+  getCommands().performPrefixedCommand, handleMovePlayer).

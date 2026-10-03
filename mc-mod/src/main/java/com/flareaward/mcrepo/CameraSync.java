@@ -1,11 +1,11 @@
 package com.flareaward.mcrepo;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.input.Input;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.option.Perspective;
+import net.minecraft.client.CameraType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.Input;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Makes the Minecraft camera follow the R.E.P.O. camera.
@@ -15,6 +15,8 @@ import net.minecraft.util.math.Vec3d;
  * smoothed), and every client tick we keep the player in a docile state
  * (flying, invulnerable, no gravity, no clip, zeroed input) so vanilla physics
  * never fights the camera.
+ *
+ * Written against Mojang's official mappings (loom 1.18+ default).
  */
 public final class CameraSync {
     /** How long a pose is considered fresh before we stop driving the camera. */
@@ -51,7 +53,6 @@ public final class CameraSync {
     private long lastFovSyncMillis;
 
     private boolean worldSetupDone;
-    private boolean creativeRequested;
 
     private CameraSync(BridgeConfig config) {
         this.config = config;
@@ -83,9 +84,9 @@ public final class CameraSync {
         if (!isActive()) {
             return;
         }
-        MinecraftClient client = MinecraftClient.getInstance();
-        ClientPlayerEntity player = client.player;
-        if (player == null || client.world == null) {
+        Minecraft client = Minecraft.getInstance();
+        LocalPlayer player = client.player;
+        if (player == null || client.level == null) {
             return;
         }
 
@@ -127,12 +128,11 @@ public final class CameraSync {
         applyToPlayer(player, smoothX, smoothY, smoothZ, normalizeYaw(smoothYaw), clamp(smoothPitch, -89.9f, 89.9f));
     }
 
-    /** Called from the MinecraftClient.tick mixin at 20 Hz. */
-    public void onClientTick(MinecraftClient client) {
-        ClientPlayerEntity player = client.player;
-        if (player == null || client.world == null) {
+    /** Called from the Minecraft.tick mixin at 20 Hz. */
+    public void onClientTick(Minecraft client) {
+        LocalPlayer player = client.player;
+        if (player == null || client.level == null) {
             worldSetupDone = false;
-            creativeRequested = false;
             seeded = false;
             return;
         }
@@ -162,22 +162,22 @@ public final class CameraSync {
         applyToPlayer(player, smoothX, smoothY, smoothZ, tyaw, tpitch);
     }
 
-    private void applyToPlayer(ClientPlayerEntity player, double x, double y, double z, float yaw, float pitch) {
+    private void applyToPlayer(LocalPlayer player, double x, double y, double z, float yaw, float pitch) {
         player.setPos(x, y, z);
         // Kill render interpolation between previous and current tick positions:
         // we drive the camera every frame ourselves.
-        player.prevX = x;
-        player.prevY = y;
-        player.prevZ = z;
-        player.setYaw(yaw);
-        player.setPitch(pitch);
-        player.prevYaw = yaw;
-        player.prevPitch = pitch;
-        player.setVelocity(Vec3d.ZERO);
+        player.xOld = x;
+        player.yOld = y;
+        player.zOld = z;
+        player.setYRot(yaw);
+        player.setXRot(pitch);
+        player.yRotO = yaw;
+        player.xRotO = pitch;
+        player.setDeltaMovement(Vec3.ZERO);
         player.fallDistance = 0.0f;
-        player.noClip = true;
+        player.noPhysics = true;
         player.setNoGravity(true);
-        player.getAbilities().allowFlying = true;
+        player.getAbilities().canFly = true;
         player.getAbilities().flying = true;
         player.getAbilities().invulnerable = true;
         // Neutralize keyboard/WASD so the player cannot fight the camera.
@@ -186,7 +186,7 @@ public final class CameraSync {
         player.verticalCollision = false;
     }
 
-    private void setupWorldOnce(MinecraftClient client) {
+    private void setupWorldOnce(Minecraft client) {
         if (worldSetupDone) {
             return;
         }
@@ -194,13 +194,13 @@ public final class CameraSync {
 
         if (config.hideHud) {
             try {
-                client.options.hudHidden = true;
+                client.options.hideGui = true;
             } catch (Throwable t) {
                 McRepoBridge.LOGGER.debug("Could not hide HUD: {}", t.toString());
             }
         }
         try {
-            client.options.getPerspective().setValue(Perspective.FIRST_PERSON);
+            client.options.getCameraType().setValue(CameraType.FIRST_PERSON);
         } catch (Throwable t) {
             McRepoBridge.LOGGER.debug("Could not force first person view: {}", t.toString());
         }
@@ -209,7 +209,7 @@ public final class CameraSync {
             MinecraftServer server = client.getServer();
             if (server != null) {
                 try {
-                    server.getCommandManager().executeWithPrefix(server.getCommandSource(), "gamemode creative");
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode creative");
                 } catch (Throwable t) {
                     McRepoBridge.LOGGER.debug("Could not switch to creative mode: {}", t.toString());
                 }
@@ -217,7 +217,7 @@ public final class CameraSync {
         }
     }
 
-    private void syncFovPeriodically(MinecraftClient client) {
+    private void syncFovPeriodically(Minecraft client) {
         if (!config.syncFov) {
             return;
         }

@@ -1,8 +1,8 @@
 package com.flareaward.mcrepo.mixin;
 
 import com.flareaward.mcrepo.CameraSync;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -17,10 +17,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * version, this hook is skipped (minor rubber-banding) instead of breaking
  * camera sync entirely.
  */
-@Mixin(ClientPlayNetworkHandler.class)
+@Mixin(ClientPacketListener.class)
 public abstract class IgnorePositionCorrectionMixin {
-    @Inject(method = "onPlayerPositionLook", at = @At("HEAD"), cancellable = true)
-    private void mcrepo$ignoreCorrections(PlayerPositionLookS2CPacket packet, CallbackInfo ci) {
+    @Inject(method = "handleMovePlayer", at = @At("HEAD"), cancellable = true)
+    private void mcrepo$ignoreCorrections(ClientboundPlayerPositionPacket packet, CallbackInfo ci) {
         CameraSync cameraSync = CameraSync.get();
         if (cameraSync != null && cameraSync.isActive()) {
             ci.cancel();

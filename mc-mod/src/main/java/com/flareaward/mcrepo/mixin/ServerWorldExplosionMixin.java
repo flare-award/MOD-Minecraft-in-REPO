@@ -1,10 +1,10 @@
 package com.flareaward.mcrepo.mixin;
 
 import com.flareaward.mcrepo.BridgeServer;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.TntEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.World;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.PrimedTnt;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,13 +20,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * version renames it, the whole config is skipped gracefully and TNT keeps
  * working through TntEntityExplosionMixin.
  *
- * Target (yarn, Minecraft 1.21.1):
- *   ServerWorld#createExplosion(Entity, double, double, double, float, boolean, World.ExplosionInteractionType)
+ * Target (official mappings, Minecraft 1.21.1):
+ *   ServerLevel#createExplosion(Entity, double, double, double, float, boolean, Level.ExplosionInteraction)
  */
-@Mixin(ServerWorld.class)
+@Mixin(ServerLevel.class)
 public abstract class ServerWorldExplosionMixin {
     @Inject(
-            method = "createExplosion(Lnet/minecraft/entity/Entity;DDDFFZLnet/minecraft/world/World$ExplosionInteractionType;)Lnet/minecraft/world/explosion/Explosion;",
+            method = "createExplosion(Lnet/minecraft/world/entity/Entity;DDDFFZLnet/minecraft/world/level/Level$ExplosionInteraction;)Lnet/minecraft/world/level/Explosion;",
             at = @At("HEAD"))
     private void mcrepo$broadcastExplosion(
             Entity entity,
@@ -35,9 +35,9 @@ public abstract class ServerWorldExplosionMixin {
             double z,
             float power,
             boolean createFire,
-            World.ExplosionInteractionType interactionType,
+            Level.ExplosionInteraction interactionType,
             CallbackInfo ci) {
-        if (entity instanceof TntEntity) {
+        if (entity instanceof PrimedTnt) {
             return; // already reported by TntEntityExplosionMixin
         }
         String source = interactionType == null

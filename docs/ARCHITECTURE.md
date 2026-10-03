@@ -105,22 +105,22 @@ On `boom(x, y, z, power)` (main thread):
   explosion hooks run on the integrated server thread and only enqueue JSON
   lines. Camera state is handed over via a locked pose record.
 
-## Minecraft mixin targets (yarn, pinned to 1.21.1)
+## Minecraft mixin targets (official mappings, pinned to 1.21.1)
 
 Required config (`mcrepo.mixins.json`):
 
 | Mixin | Target | Notes |
 |---|---|---|
-| MinecraftClientTickMixin | `MinecraftClient.tick()V` | 20 Hz camera/ability update, player snapshot |
+| MinecraftClientTickMixin | `Minecraft.tick()V` | 20 Hz camera/ability update, player snapshot |
 | GameRendererCameraMixin | `GameRenderer.render(FJZ)V` | per-frame camera application |
-| TntEntityExplosionMixin | `TntEntity.explode()V` | stable no-arg signature; power read reflectively |
+| TntEntityExplosionMixin | `PrimedTnt.explode()V` | stable no-arg signature; power read reflectively |
 
 Optional config (`mcrepo.optional.mixins.json`, `required:false`):
 
 | Mixin | Target | Notes |
 |---|---|---|
-| ServerWorldExplosionMixin | `ServerWorld.createExplosion(Entity,DDDFFZLWorld$ExplosionInteractionType;)` | all non-TNT explosions |
-| IgnorePositionCorrectionMixin | `ClientPlayNetworkHandler.onPlayerPositionLook` | suppress rubber-banding |
+| ServerWorldExplosionMixin | `ServerLevel.createExplosion(Entity,DDDFFZLLevel$ExplosionInteraction;)` | all non-TNT explosions |
+| IgnorePositionCorrectionMixin | `ClientPacketListener.handleMovePlayer` | suppress rubber-banding |
 
 If the optional targets rename in a newer game version, that config is
 skipped and the core features keep working.
