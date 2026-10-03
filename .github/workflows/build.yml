@@ -80,13 +80,14 @@ jobs:
             status=$?
           fi
           if [ "$status" -ne 0 ]; then
-            echo "Gradle build failed - collecting full diagnostics"
+            set +e # never let a diagnostic command kill the step
+            echo "Gradle build failed - collecting diagnostics"
             {
               echo "===== gradle build log (tail 800) ====="
               tail -n 800 /tmp/gradle-build.log
               echo
               echo "===== dependency insight: minecraft in compileClasspath ====="
-              ./gradlew -q dependencyInsight --dependency minecraft --configuration compileClasspath 2>&1 | head -n 60 || true
+              ./gradlew -q dependencyInsight --dependency minecraft --configuration compileClasspath 2>&1 | head -n 60
               echo
               echo "===== deobf jar probe ====="
               jar=$(find ~/.gradle/caches/fabric-loom/minecraftMaven -name "*deobf*1.21.1.jar" 2>/dev/null | head -1)
@@ -100,20 +101,26 @@ jobs:
               fi
               echo
               echo "===== compileClasspath tree ====="
-              ./gradlew -q dependencies --configuration compileClasspath 2>&1 | head -n 150 || true
+              ./gradlew -q dependencies --configuration compileClasspath 2>&1 | head -n 150
               echo
               echo "===== gradle.properties ====="
               cat gradle.properties
             } > /tmp/diag.txt 2>&1
-            root=$(grep -E 'FAILURE:|What went wrong|Caused by:|Could not resolve|Could not find|error:' /tmp/gradle-build.log | head -n 6 | sed ':a;N;$!ba;s/\n/%0A/g')
-            echo "::error::BUILD FAILED - see ci-diagnostics branch. Root cause lines:%0A${root}"
+            # Packed annotations (GitHub caps the count, so few + multi-line).
+            root=$(grep -E 'FAILURE:|What went wrong|Caused by:|Could not resolve|Could not find|error:' /tmp/gradle-build.log | head -n 5 | sed ':a;N;$!ba;s/\n/%0A/g')
+            taillog=$(tail -n 25 /tmp/gradle-build.log | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::BUILD FAILED - root lines + log tail:%0A${root}%0A---%0A${taillog}"
+            probe=$(sed -n '/===== deobf jar probe/,/===== compileClasspath tree/p' /tmp/diag.txt | head -n 45 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::JAR PROBE:%0A${probe}"
+            insight=$(sed -n '/===== dependency insight/,/===== deobf jar probe/p' /tmp/diag.txt | head -n 45 | sed ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error::DEPENDENCY INSIGHT:%0A${insight}"
             mkdir -p ci-diag
             cp /tmp/diag.txt ci-diag/diag.txt
-            git config user.name "ci-diagnostics"
-            git config user.email "ci-diagnostics@users.noreply.github.com"
-            git add ci-diag
-            git commit -q -m "CI diagnostics for failed mc-mod build" || true
-            git push -q -f origin HEAD:ci-diagnostics || echo "::warning::could not push diagnostics branch"
+            git config user.name "ci-diagnostics" 2>/dev/null
+            git config user.email "ci-diagnostics@users.noreply.github.com" 2>/dev/null
+            git add ci-diag 2>/dev/null
+            git commit -q -m "CI diagnostics for failed mc-mod build" 2>/dev/null
+            git push -q -f origin HEAD:ci-diagnostics 2>/dev/null || echo "::warning::could not push ci-diagnostics branch (token permissions)"
             echo "----- raw gradle log tail -----"
             tail -n 300 /tmp/gradle-build.log | sed 's/^/| /'
           else
