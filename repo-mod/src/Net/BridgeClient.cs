@@ -183,7 +183,6 @@ namespace MinecraftInRepo.Net
             {
                 case "hello":
                 {
-                    saidHello = true;
                     string mc = JsonLite.GetString(msg, "mc", "?");
                     string bridge = JsonLite.GetString(msg, "bridge", "?");
                     if (HelloReceived != null)
