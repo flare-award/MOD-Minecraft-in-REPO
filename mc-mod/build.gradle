@@ -12,6 +12,9 @@ plugins {
 dependencies {
 	// To change the version see gradle.properties
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	// Mojang's official mappings (the mod sources use official names).
+	// Without this line current loom leaves 1.21.1 obfuscated.
+	mappings loom.officialMojangMappings()
 	// Provides the loader + Mixin classes on the compile classpath.
 	// (The example template gets these transitively via fabric-api; this mod
 	// intentionally skips fabric-api, so it declares the loader itself.)
