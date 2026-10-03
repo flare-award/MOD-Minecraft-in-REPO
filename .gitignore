@@ -13,3 +13,6 @@ dist/
 .pytest_cache/
 # the parent repo ignores bin/ (build output); the CLI launcher lives here
 !bin/
+
+# Local Windows installation inventory (never commit user machine metadata)
+/tools/game-versions.json

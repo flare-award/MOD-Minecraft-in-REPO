@@ -1,6 +1,7 @@
-# Read-only local inventory. Run in Windows PowerShell; paste the JSON output, not game files.
+# Read-only local inventory. Saves JSON beside this script, even if PowerShell closes.
 # No network requests, installs, or game launches.
 $ErrorActionPreference = 'SilentlyContinue'
+$outputPath = Join-Path $PSScriptRoot "game-versions.json"
 $steamRoots = @(
     (Join-Path ${env:ProgramFiles(x86)} 'Steam'),
     (Join-Path $env:ProgramFiles 'Steam'),
@@ -27,6 +28,7 @@ foreach ($lib in ($libraries | Select-Object -Unique)) {
         $appId = if ($text -match '"appid"\s+"([0-9]+)"') { $Matches[1] } else { $null }
         $buildId = if ($text -match '"buildid"\s+"([0-9]+)"') { $Matches[1] } else { $null }
         $folder = if ($text -match '"installdir"\s+"([^"]+)"') { $Matches[1] } else { $null }
+        if (!$folder) { continue }
         $install = Join-Path (Join-Path $lib 'steamapps\common') $folder
         $globalGameManagers = Join-Path $install 'REPO_Data\globalgamemanagers'
         $repo += [ordered]@{
@@ -69,4 +71,6 @@ foreach ($profileFile in @('launcher_profiles.json','launcher_profiles_microsoft
 }
 [ordered]@{ repo = $repo; minecraftVersions = $mc; minecraftProfiles = $profileSummary
     fabricApiJars = @(Get-ChildItem (Join-Path $mcRoot 'mods') -Filter '*fabric-api*.jar' -File | Select-Object -ExpandProperty Name)
-} | ConvertTo-Json -Depth 8
+} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $outputPath -Encoding UTF8
+Write-Host "Inventory saved to: $outputPath"
+Write-Host "Open that file and paste its contents here. If repo or minecraftVersions is empty, report that too."

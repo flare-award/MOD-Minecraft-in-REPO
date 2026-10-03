@@ -20,3 +20,5 @@ With .NET SDK and BepInEx installed, set `RepoManaged` to the R.E.P.O. install d
 
 ## Local version detection requested
 Checked this sandbox on 2026-10-03: Linux, no mounted Windows drives or Steam/Minecraft installations under `/home/user`, `/mnt`, or `/media`; no .NET SDK. The user's Windows installation is not available to the sandbox. Added `tools/Detect-GameVersions.ps1`, a read-only inventory script for the user's Windows PC. It reports Steam build ID, game binary metadata/hash, loader presence, Minecraft installed version JSON and launcher profile version IDs without uploading game binaries or account information. Do not pin game APIs until the inventory is returned; `latest` is not an exact version.
+
+The Windows inventory script now saves `tools/game-versions.json` beside itself rather than relying on console output; this file is gitignored because it describes a user's local installation. It has not been run here (PowerShell and the game installs are unavailable).
