@@ -53,7 +53,19 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
       - name: Build with Loom
-        run: ./gradlew build --no-daemon --stacktrace
+        shell: bash
+        run: |
+          if ./gradlew build --no-daemon --stacktrace > /tmp/gradle-build.log 2>&1; then
+            status=0
+          else
+            status=$?
+          fi
+          tail -n 300 /tmp/gradle-build.log
+          if [ "$status" -ne 0 ]; then
+            echo "Gradle build failed - echoing the tail as annotations"
+            tail -n 60 /tmp/gradle-build.log | sed 's/^/::error::/'
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@v4
         with:
           name: mcrepo-fabric-mod

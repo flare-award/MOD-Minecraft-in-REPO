@@ -306,7 +306,8 @@ namespace UnityEngine
 
     public class GUIStyleState
     {
-        public Color color { get; set; }
+        // Real Unity spells this "textColor" - the stubs must match exactly.
+        public Color textColor { get; set; }
         public Texture2D background { get; set; }
     }
 

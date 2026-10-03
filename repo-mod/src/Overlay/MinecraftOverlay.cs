@@ -126,7 +126,7 @@ namespace MinecraftInRepo.Overlay
                 alignment = TextAnchor.MiddleLeft
             };
             statusStyle.normal.background = statusBackground;
-            statusStyle.normal.color = new Color(0.9f, 1f, 0.9f, 1f);
+            statusStyle.normal.textColor = new Color(0.9f, 1f, 0.9f, 1f);
         }
     }
 }

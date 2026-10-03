@@ -35,7 +35,6 @@ namespace MinecraftInRepo.Net
         private bool connecting;
         private float nextConnectAttempt;
         private float nextPing;
-        private bool saidHello;
 
         private readonly ConcurrentQueue<Action> mainQueue = new ConcurrentQueue<Action>();
 
@@ -85,53 +84,65 @@ namespace MinecraftInRepo.Net
 
         private IEnumerator ConnectRoutine()
         {
+            // NB: C# forbids `yield return` inside a try/catch, so the wait
+            // loop lives outside of it.
             connecting = true;
             bool success = false;
             TcpClient client = new TcpClient();
+            IAsyncResult ar = null;
             try
             {
-                IAsyncResult ar = client.BeginConnect(IPAddress.Loopback, config.Port.Value, null, null);
+                ar = client.BeginConnect(IPAddress.Loopback, config.Port.Value, null, null);
+            }
+            catch (Exception e)
+            {
+                log.LogInfo("[MinecraftInRepo] Connection attempt failed: " + e.Message);
+            }
+
+            if (ar != null)
+            {
                 float deadline = Time.realtimeSinceStartup + 2f;
                 while (!ar.IsCompleted && Time.realtimeSinceStartup < deadline)
                 {
                     yield return null;
                 }
-                if (!ar.IsCompleted)
+
+                try
+                {
+                    if (!ar.IsCompleted)
+                    {
+                        try { client.Close(); } catch { /* ignore */ }
+                        log.LogInfo("[MinecraftInRepo] Minecraft bridge not reachable (is Minecraft running?). Retrying.");
+                    }
+                    else
+                    {
+                        client.EndConnect(ar);
+                        client.NoDelay = true;
+                        tcp = client;
+                        stream = client.GetStream();
+                        writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = false };
+                        connected = true;
+                        nextPing = Time.time + config.PingSeconds.Value;
+
+                        readerThread = new Thread(ReaderLoop) { IsBackground = true, Name = "MinecraftInRepo-BridgeReader" };
+                        readerThread.Start(stream);
+
+                        SendRaw(JsonLite.WriteObject("t", "hello", "proto", 1));
+                        log.LogInfo("[MinecraftInRepo] Connected to the Minecraft bridge on port " + config.Port.Value);
+                        success = true;
+                    }
+                }
+                catch (Exception e)
                 {
                     try { client.Close(); } catch { /* ignore */ }
-                    log.LogInfo("[MinecraftInRepo] Minecraft bridge not reachable (is Minecraft running?). Retrying.");
-                }
-                else
-                {
-                    client.EndConnect(ar);
-                    client.NoDelay = true;
-                    tcp = client;
-                    stream = client.GetStream();
-                    writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = false };
-                    connected = true;
-                    saidHello = false;
-                    nextPing = Time.time + config.PingSeconds.Value;
-
-                    readerThread = new Thread(ReaderLoop) { IsBackground = true, Name = "MinecraftInRepo-BridgeReader" };
-                    readerThread.Start(stream);
-
-                    SendRaw(JsonLite.WriteObject("t", "hello", "proto", 1));
-                    log.LogInfo("[MinecraftInRepo] Connected to the Minecraft bridge on port " + config.Port.Value);
-                    success = true;
+                    log.LogInfo("[MinecraftInRepo] Connection attempt failed: " + e.Message);
                 }
             }
-            catch (Exception e)
+
+            connecting = false;
+            if (!success)
             {
-                try { client.Close(); } catch { /* ignore */ }
-                log.LogInfo("[MinecraftInRepo] Connection attempt failed: " + e.Message);
-            }
-            finally
-            {
-                connecting = false;
-                if (!success)
-                {
-                    nextConnectAttempt = Time.time + Mathf.Max(0.5f, config.ConnectInterval.Value);
-                }
+                nextConnectAttempt = Time.time + Mathf.Max(0.5f, config.ConnectInterval.Value);
             }
         }
 
