@@ -84,6 +84,10 @@ jobs:
               }
               hits > 0 && hits < 40 && /^[[:space:]]/ { print; hits++ }
             ' /tmp/gradle-build.log | head -n 80 | sed 's/^/::error::/'
+            echo "::error::--- compile classpath dump follows ---"
+            ./gradlew -q dependencies --configuration compileClasspath 2>&1 | head -n 60 | sed 's/^/::error::/' || true
+            echo "::error::--- minecraft artifacts in gradle cache ---"
+            find ~/.gradle -iname "*minecraft*1.21.1*" -maxdepth 8 2>/dev/null | head -n 20 | sed 's/^/::error::/' || true
           fi
           exit "$status"
       - uses: actions/upload-artifact@v4
