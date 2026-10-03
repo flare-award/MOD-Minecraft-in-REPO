@@ -1,0 +1,12 @@
+{
+	"required": false,
+	"package": "com.flareaward.mcrepo.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"IgnorePositionCorrectionMixin",
+		"ServerWorldExplosionMixin"
+	],
+	"injectors": {
+		"defaultRequire": 0
+	}
+}

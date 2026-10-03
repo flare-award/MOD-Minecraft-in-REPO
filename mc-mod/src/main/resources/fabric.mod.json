@@ -1,0 +1,29 @@
+{
+	"schemaVersion": 1,
+	"id": "mcrepo",
+	"version": "${version}",
+	"name": "Minecraft in R.E.P.O. (Bridge)",
+	"description": "The Minecraft half of 'Minecraft in R.E.P.O.': follows the R.E.P.O. camera and reports TNT explosions to R.E.P.O. over a local bridge. Client-only; no fabric-api needed.",
+	"authors": [
+		"flare-award"
+	],
+	"contact": {
+		"sources": "https://github.com/flare-award/MOD-Minecraft-in-REPO"
+	},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.flareaward.mcrepo.McRepoBridge"
+		]
+	},
+	"mixins": [
+		"mcrepo.mixins.json",
+		"mcrepo.optional.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": "~1.21.1",
+		"java": ">=21"
+	}
+}

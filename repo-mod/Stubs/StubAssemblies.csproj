@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Stub reference assembly for building MinecraftInRepo WITHOUT a R.E.P.O. install
+    (CI, agent sandboxes, contributors without the game). It compiles hand-written,
+    signature-accurate declarations of every external API the mod touches into a
+    single Assembly-CSharp.dll.
+
+    When a real game install is available (GameRefMode=game) or the R.E.P.O.
+    GameLibs NuGet is used (GameRefMode=nuget), this stub is NOT used.
+
+    Signatures were verified against public R.E.P.O. mod sources (BepInEx and
+    MelonLoader mods that compile against the real game assemblies). See
+    docs/ARCHITECTURE.md, "API verification".
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Assembly-CSharp</AssemblyName>
+    <RootNamespace>StubbedReferences</RootNamespace>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>CS0067;CS0414;CS0649;CS1591</NoWarn>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutDir>$(MSBuildThisFileDirectory)..\libs\stubs\</OutDir>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+</Project>

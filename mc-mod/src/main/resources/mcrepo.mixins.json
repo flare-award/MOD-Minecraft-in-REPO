@@ -1,0 +1,13 @@
+{
+	"required": true,
+	"package": "com.flareaward.mcrepo.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"MinecraftClientTickMixin",
+		"GameRendererCameraMixin",
+		"TntEntityExplosionMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

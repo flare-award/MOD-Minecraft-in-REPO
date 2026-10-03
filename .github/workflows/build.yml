@@ -1,0 +1,62 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  repo-mod-stubs:
+    name: R.E.P.O. mod - offline stub references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Build stub reference assembly
+        run: dotnet build repo-mod/Stubs/StubAssemblies.csproj -c Release --nologo
+      - name: Build MinecraftInRepo plugin
+        run: dotnet build repo-mod/MinecraftInRepo.csproj -c Release --nologo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftInRepo-stubs-build
+          path: repo-mod/bin/Release/MinecraftInRepo.dll
+
+  repo-mod-gamelibs:
+    name: R.E.P.O. mod - real game assemblies (NuGet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Build against R.E.P.O.GameLibs.Steam
+        run: dotnet build repo-mod/MinecraftInRepo.csproj -c Release --nologo -p:UseGameLibsNuGet=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftInRepo-gamelibs-build
+          path: repo-mod/bin/Release/MinecraftInRepo.dll
+
+  mc-mod:
+    name: Minecraft bridge mod - Fabric 1.21.1
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mc-mod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      - name: Build with Loom
+        run: ./gradlew build --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcrepo-fabric-mod
+          path: |
+            mc-mod/build/libs/*.jar
+            !mc-mod/build/libs/*-sources.jar

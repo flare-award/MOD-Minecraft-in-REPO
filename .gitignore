@@ -1,3 +1,4 @@
+# .NET
 .venv/
 __pycache__/
 *.pyc
@@ -6,10 +7,25 @@ uv.lock
 build/
 dist/
 *.egg-info/
+.pytest_cache/
+repo-mod/bin/
+repo-mod/obj/
+repo-mod/libs/
+*.user
+.vs/
+
+# Fabric / Gradle (keep the wrapper jar)
+mc-mod/.gradle/
+mc-mod/build/
+mc-mod/run/
+mc-mod/.idea/
+mc-mod/*.ipr
+mc-mod/*.iws
+
 # captures and scratch
 *.mkv
 *.audio.raw
 /scratch/
-.pytest_cache/
+
 # the parent repo ignores bin/ (build output); the CLI launcher lives here
 !bin/

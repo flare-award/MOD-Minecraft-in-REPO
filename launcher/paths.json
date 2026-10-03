@@ -1,0 +1,5 @@
+{
+  "repoPath": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\REPO",
+  "minecraftLauncher": "C:\\Program Files (x86)\\Minecraft Launcher\\MinecraftLauncher.exe",
+  "notes": "Edit both paths to match your machine, then run Play-MinecraftInRepo.ps1 (or .bat). Create a Minecraft profile/installation with Fabric loader for Minecraft 1.21.1 that has the mcrepo mod installed, and select it before launching."
+}

@@ -1,0 +1,113 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MinecraftInRepo - the R.E.P.O. (BepInEx) half of the mod.
+
+    Reference resolution ("GameRefMode"):
+      game   - reference the DLLs from a local R.E.P.O. install
+               (set RepoGameDir, e.g. dotnet build -p:RepoGameDir="C:\...\REPO";
+               the BepInEx folder is expected inside it; override with BepInExDir)
+      nuget  - reference the community game assemblies package R.E.P.O.GameLibs.Steam
+               plus BepInEx from NuGet (needs nuget.org + nuget.bepinex.dev)
+      stubs  - reference hand-written stub assemblies (built by Stubs/StubAssemblies.csproj),
+               so the mod compiles with no game and no network. This is the default
+               when no game install is detected.
+
+    The built DLL works the same in all three modes; only the compile-time
+    reference assemblies differ.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>MinecraftInRepo</AssemblyName>
+    <RootNamespace>MinecraftInRepo</RootNamespace>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>1.0.0</Version>
+    <Description>Puts real Minecraft inside R.E.P.O.: camera follow, window overlay, TNT that damages enemies, items, valuables and players.</Description>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
+  <!-- Locate a local game install (can be provided via -p:RepoGameDir=... or env REPO_GAME_DIR) -->
+  <PropertyGroup>
+    <RepoGameDir Condition="'$(RepoGameDir)' == ''">$(REPO_GAME_DIR)</RepoGameDir>
+    <RepoManagedDir Condition="'$(RepoGameDir)' != ''">$([MSBuild]::NormalizePath('$(RepoGameDir)', 'REPO_Data', 'Managed'))</RepoManagedDir>
+    <BepInExDir Condition="'$(BepInExDir)' == '' and '$(RepoGameDir)' != ''">$([MSBuild]::NormalizePath('$(RepoGameDir)', 'BepInEx'))</BepInExDir>
+    <GameRefMode Condition="'$(GameRefMode)' == '' and '$(RepoManagedDir)' != '' and Exists('$(RepoManagedDir)/Assembly-CSharp.dll')">game</GameRefMode>
+    <GameRefMode Condition="'$(GameRefMode)' == '' and '$(UseGameLibsNuGet)' == 'true'">nuget</GameRefMode>
+    <GameRefMode Condition="'$(GameRefMode)' == ''">stubs</GameRefMode>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(GameRefMode)' == 'nuget'">
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+  </PropertyGroup>
+
+  <!-- Mode: local game install -->
+  <ItemGroup Condition="'$(GameRefMode)' == 'game'">
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(RepoManagedDir)/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(RepoManagedDir)/UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(RepoManagedDir)/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(RepoManagedDir)/UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(RepoManagedDir)/UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(RepoManagedDir)/UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(RepoManagedDir)/UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExDir)/core/BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Mode: community NuGet packages (needs network) -->
+  <ItemGroup Condition="'$(GameRefMode)' == 'nuget'">
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <PackageReference Include="R.E.P.O.GameLibs.Steam" Version="*-*" />
+  </ItemGroup>
+
+  <!-- Mode: offline stubs -->
+  <ItemGroup Condition="'$(GameRefMode)' == 'stubs'">
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(MSBuildThisFileDirectory)libs/stubs/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="StubsHint" BeforeTargets="ResolveAssemblyReferences" Condition="'$(GameRefMode)' == 'stubs' and !Exists('$(MSBuildThisFileDirectory)libs/stubs/Assembly-CSharp.dll')">
+    <Error Text="Stub references not built yet. Run: dotnet build Stubs/StubAssemblies.csproj   (or build with a real game: -p:RepoGameDir=&lt;path to R.E.P.O.&gt;)" />
+  </Target>
+
+  <Target Name="ModeInfo" BeforeTargets="Compile">
+    <Message Importance="high" Text="MinecraftInRepo: compiling against GameRefMode=$(GameRefMode)" />
+  </Target>
+
+</Project>
