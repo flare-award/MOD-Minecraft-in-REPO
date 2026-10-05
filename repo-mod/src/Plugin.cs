@@ -81,6 +81,11 @@ namespace MinecraftInRepo
             Logger.LogInfo("[MinecraftInRepo] Keyboard backend: " + InputHelper.Backend);
             Logger.LogInfo("[MinecraftInRepo] Host object '" + host.name + "' scene=" + host.scene.name +
                 " active=" + host.activeInHierarchy + " enabled=" + enabled);
+
+            // R.E.P.O. does not deliver Update()/OnGUI() to plugin components, so
+            // the mod is driven from Unity's render callback instead. This runs on
+            // the main thread every frame, independently of MonoBehaviour messages.
+            Application.onBeforeRender += Pump;
             StartHeartbeat();
             Logger.LogInfo(string.Format(
                 "[MinecraftInRepo] {0} v{1} loaded. Waiting for Minecraft (bridge port {2}). " +
@@ -91,15 +96,99 @@ namespace MinecraftInRepo
                 PluginName, PluginVersion, config.Port.Value));
         }
 
+        private int lastTickFrame = -1;
+        private int lastDrawFrame = -1;
+        private bool loggedPump;
+        private bool driverRan;
+        private ModDriver driver;
+        private float nextDriverCheck;
+
         private void Update()
         {
+            TickAll();
+        }
+
+        /// <summary>Main-thread pump: keeps the mod alive even when Unity never
+        /// delivers Update() to the plugin component.</summary>
+        private void Pump()
+        {
+            if (!loggedPump)
+            {
+                loggedPump = true;
+                Logger.LogInfo("[MinecraftInRepo] Render pump running (driving the mod from Application.onBeforeRender).");
+            }
+
+            if (!driverRan && Time.unscaledTime >= nextDriverCheck)
+            {
+                nextDriverCheck = Time.unscaledTime + 3f;
+                EnsureDriver();
+            }
+
+            if (!driverRan)
+            {
+                TickAll();
+            }
+        }
+
+        /// <summary>Creates a component that (unlike the plugin) does get OnGUI.</summary>
+        private void EnsureDriver()
+        {
+            if (driverRan)
+            {
+                return;
+            }
+            if (driver != null)
+            {
+                // Created but never ticked - try once more on a fresh object.
+                Object.Destroy(driver.gameObject);
+                driver = null;
+            }
+            GameObject go = new GameObject("MinecraftInRepo_Driver");
+            Object.DontDestroyOnLoad(go);
+            driver = go.AddComponent<ModDriver>();
+            driver.Init(this);
+            Logger.LogInfo("[MinecraftInRepo] Driver component created (scene=" + go.scene.name + ").");
+        }
+
+        internal void TickFromDriver()
+        {
+            if (!driverRan)
+            {
+                driverRan = true;
+                Logger.LogInfo("[MinecraftInRepo] Driver component is ticking - Update/OnGUI are delivered to it.");
+            }
+            TickAll();
+        }
+
+        internal void DrawFromDriver()
+        {
+            if (Time.frameCount == lastDrawFrame)
+            {
+                return;
+            }
+            lastDrawFrame = Time.frameCount;
+            overlay.Draw();
+        }
+
+        /// <summary>Everything that has to happen once per frame, from whichever
+        /// source manages to tick (plugin Update, render pump or driver).</summary>
+        private void TickAll()
+        {
+            if (Time.frameCount == lastTickFrame)
+            {
+                return;
+            }
+            lastTickFrame = Time.frameCount;
+
             if (!loggedFirstUpdate)
             {
                 loggedFirstUpdate = true;
-                Logger.LogInfo("[MinecraftInRepo] Update loop running (keyboard backend: " + InputHelper.Backend + ").");
+                Logger.LogInfo("[MinecraftInRepo] Tick running (keyboard backend: " + InputHelper.Backend + ").");
             }
 
             gate.Tick();
+            bridge.Tick();
+            capture.Tick();
             cameraSync.Tick();
             router.Tick();
 
@@ -130,7 +219,7 @@ namespace MinecraftInRepo
         /// together with a component Unity decided not to tick.</summary>
         private void OnGUI()
         {
-            overlay.Draw();
+            DrawFromDriver();
         }
 
         /// <summary>
@@ -145,19 +234,10 @@ namespace MinecraftInRepo
                 for (int i = 1; i <= 12; i++)
                 {
                     Thread.Sleep(5000);
-                    string hostState;
-                    try
-                    {
-                        hostState = "scene=" + gameObject.scene.name + " active=" + gameObject.activeInHierarchy;
-                    }
-                    catch (System.Exception e)
-                    {
-                        hostState = "host unavailable: " + e.Message;
-                    }
                     Logger.LogInfo(string.Format(
-                        "[MinecraftInRepo] heartbeat {0}s: update-ran={1} ongui-ran={2} connected={3} host[{4}]",
+                        "[MinecraftInRepo] heartbeat {0}s: tick-ran={1} ongui-ran={2} connected={3} pump={4} driver={5}",
                         i * 5, loggedFirstUpdate, overlay != null && overlay.GuiRan,
-                        bridge != null && bridge.Connected, hostState));
+                        bridge != null && bridge.Connected, loggedPump, driverRan));
                 }
             });
             thread.IsBackground = true;

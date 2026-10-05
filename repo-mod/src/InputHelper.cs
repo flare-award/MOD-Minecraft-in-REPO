@@ -35,11 +35,26 @@ namespace MinecraftInRepo
         private static bool probed;
         private static bool useInputSystem;
         private static PropertyInfo keyboardCurrent;
-        private static PropertyInfo wasPressedThisFrame;
+        private static PropertyInfo isPressedProperty;
         private static readonly Dictionary<KeyCode, PropertyInfo> keyControls = new Dictionary<KeyCode, PropertyInfo>();
+        private static readonly Dictionary<KeyCode, bool> previousState = new Dictionary<KeyCode, bool>();
 
-        /// <summary>True once on the frame the key went down, in either input backend.</summary>
+        /// <summary>
+        /// True once when the key goes down, in either input backend.
+        ///
+        /// The edge is detected from the *held* state rather than from
+        /// wasPressedThisFrame, because the mod may be polled outside of Update
+        /// (render pump) where per-frame flags are unreliable.
+        /// </summary>
         public static bool GetKeyDown(KeyCode code)
+        {
+            bool down = IsDown(code);
+            bool was = previousState.TryGetValue(code, out bool previous) && previous;
+            previousState[code] = down;
+            return down && !was;
+        }
+
+        private static bool IsDown(KeyCode code)
         {
             if (!probed)
             {
@@ -51,13 +66,13 @@ namespace MinecraftInRepo
                 try
                 {
                     object keyboard = keyboardCurrent != null ? keyboardCurrent.GetValue(null) : null;
-                    if (keyboard != null && wasPressedThisFrame != null &&
+                    if (keyboard != null && isPressedProperty != null &&
                         keyControls.TryGetValue(code, out PropertyInfo keyProperty) && keyProperty != null)
                     {
                         object control = keyProperty.GetValue(keyboard);
                         if (control != null)
                         {
-                            return (bool)wasPressedThisFrame.GetValue(control);
+                            return (bool)isPressedProperty.GetValue(control);
                         }
                     }
                 }
@@ -69,7 +84,7 @@ namespace MinecraftInRepo
 
             try
             {
-                return Input.GetKeyDown(code);
+                return Input.GetKey(code);
             }
             catch
             {
@@ -119,12 +134,12 @@ namespace MinecraftInRepo
                         continue;
                     }
                     keyControls[pair.Key] = property;
-                    if (wasPressedThisFrame == null)
+                    if (isPressedProperty == null)
                     {
-                        wasPressedThisFrame = property.PropertyType.GetProperty("wasPressedThisFrame", BindingFlags.Public | BindingFlags.Instance);
+                        isPressedProperty = property.PropertyType.GetProperty("isPressed", BindingFlags.Public | BindingFlags.Instance);
                     }
                 }
-                useInputSystem = keyboardCurrent != null && wasPressedThisFrame != null && keyControls.Count > 0;
+                useInputSystem = keyboardCurrent != null && isPressedProperty != null && keyControls.Count > 0;
             }
             catch
             {

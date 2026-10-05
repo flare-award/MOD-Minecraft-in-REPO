@@ -35,49 +35,47 @@ namespace MinecraftInRepo.Capture
             config = modConfig;
             gate = playModeGate;
             log = logger;
-            StartCoroutine(CaptureLoop());
         }
 
-        private IEnumerator CaptureLoop()
+        /// <summary>Called once per frame from the plugin's tick (no coroutines:
+        /// MonoBehaviour messages are not delivered to plugin components in
+        /// R.E.P.O., so a coroutine would never advance).</summary>
+        public void Tick()
         {
-            while (true)
+            float fps = Mathf.Clamp(config.CaptureFps.Value, 1, 120);
+            captureAccumulator += Time.unscaledDeltaTime;
+            if (captureAccumulator < 1f / fps)
             {
-                yield return null;
-                float fps = Mathf.Clamp(config.CaptureFps.Value, 1, 120);
-                captureAccumulator += Time.unscaledDeltaTime;
-                if (captureAccumulator < 1f / fps)
-                {
-                    continue;
-                }
-                captureAccumulator = 0f;
+                return;
+            }
+            captureAccumulator = 0f;
 
-                if (gate != null && !gate.Allowed)
-                {
-                    // Idle in multiplayer: do not burn CPU on window capture.
-                    CurrentTexture = null;
-                    continue;
-                }
+            if (gate != null && !gate.Allowed)
+            {
+                // Idle in multiplayer: do not burn CPU on window capture.
+                CurrentTexture = null;
+                return;
+            }
 
-                if (hwnd == IntPtr.Zero || !Win32.IsWindow(hwnd))
+            if (hwnd == IntPtr.Zero || !Win32.IsWindow(hwnd))
+            {
+                if (Time.unscaledTime >= nextWindowScan)
                 {
-                    if (Time.unscaledTime >= nextWindowScan)
-                    {
-                        nextWindowScan = Time.unscaledTime + 3f;
-                        ScanForWindow();
-                    }
-                    CurrentTexture = null;
-                    continue;
+                    nextWindowScan = Time.unscaledTime + 3f;
+                    ScanForWindow();
                 }
+                CurrentTexture = null;
+                return;
+            }
 
-                try
-                {
-                    CaptureFrame();
-                }
-                catch (Exception e)
-                {
-                    log.LogWarning("[MinecraftInRepo] Window capture failed: " + e.Message);
-                    CurrentTexture = null;
-                }
+            try
+            {
+                CaptureFrame();
+            }
+            catch (Exception e)
+            {
+                log.LogWarning("[MinecraftInRepo] Window capture failed: " + e.Message);
+                CurrentTexture = null;
             }
         }
 

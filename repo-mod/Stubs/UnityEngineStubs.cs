@@ -192,6 +192,7 @@ namespace UnityEngine
 
     public class Time
     {
+        public static int frameCount => 0;
         public static float time => 0f;
         public static float deltaTime => 0.016f;
         public static float unscaledTime => 0f;
@@ -415,5 +416,10 @@ namespace UnityEngine
     {
         public static string dataPath => "";
         public static string persistentDataPath => "";
+        public static bool runInBackground { get; set; }
+
+        // Unity types this as Events.UnityAction; a method group converts to it
+        // just as well as to System.Action, so the plugin code stays identical.
+        public static event Action onBeforeRender;
     }
 }
