@@ -287,8 +287,10 @@ namespace UnityEngine
         public Texture2D(int width, int height, TextureFormat textureFormat, bool mipChain) { this.width = width; this.height = height; }
 
         public void LoadRawTextureData(byte[] data) { }
+        public void SetPixel(int x, int y, Color color) { }
         public void Apply() { }
         public void Apply(bool updateMipmaps) { }
+        public void Apply(bool updateMipmaps, bool makeNoLongerReadable) { }
     }
 
     public enum TextAnchor
@@ -311,35 +313,87 @@ namespace UnityEngine
         public Texture2D background { get; set; }
     }
 
+    public class RectOffset
+    {
+        public RectOffset() { }
+        public RectOffset(int left, int right, int top, int bottom)
+        {
+            this.left = left;
+            this.right = right;
+            this.top = top;
+            this.bottom = bottom;
+        }
+        public int left { get; set; }
+        public int right { get; set; }
+        public int top { get; set; }
+        public int bottom { get; set; }
+    }
+
     public class GUIStyle
     {
         public GUIStyle() { normal = new GUIStyleState(); }
+        public GUIStyle(GUIStyle other)
+        {
+            if (other != null)
+            {
+                normal = other.normal;
+                fontSize = other.fontSize;
+                alignment = other.alignment;
+            }
+            else
+            {
+                normal = new GUIStyleState();
+            }
+        }
         public GUIStyleState normal { get; set; }
         public int fontSize { get; set; }
         public TextAnchor alignment { get; set; }
         public bool wordWrap { get; set; }
         public bool richText { get; set; }
+        public RectOffset padding { get; set; }
+    }
+
+    public class GUIContent
+    {
+        public GUIContent() { }
+        public GUIContent(string text) { this.text = text; }
+        public string text { get; set; }
+        public static GUIContent none { get; } = new GUIContent();
+    }
+
+    public class GUISkin : Object
+    {
+        public GUIStyle label { get; set; } = new GUIStyle();
     }
 
     public class GUI
     {
         public static int depth { get; set; }
         public static Color color { get; set; }
+        public static GUISkin skin { get; set; } = new GUISkin();
 
         public static void DrawTexture(Rect screenRect, Texture texture) { }
         public static void Label(Rect screenRect, string text) { }
         public static void Label(Rect screenRect, string text, GUIStyle style) { }
+        public static void Box(Rect screenRect, string text) { }
+        public static void Box(Rect screenRect, GUIContent content, GUIStyle style) { }
     }
 
     public enum KeyCode
     {
         None = 0,
+        F1 = 282,
+        F2 = 283,
+        F3 = 284,
+        F4 = 285,
         F5 = 286,
         F6 = 287,
         F7 = 288,
         F8 = 289,
         F9 = 290,
         F10 = 291,
+        F11 = 292,
+        F12 = 293,
     }
 
     public class Input
