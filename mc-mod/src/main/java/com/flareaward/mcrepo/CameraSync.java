@@ -2,10 +2,16 @@ package com.flareaward.mcrepo;
 
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.player.Input;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Abilities;
 import net.minecraft.world.phys.Vec3;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 /**
  * Makes the Minecraft camera follow the R.E.P.O. camera.
@@ -53,6 +59,18 @@ public final class CameraSync {
     private long lastFovSyncMillis;
 
     private boolean worldSetupDone;
+
+    // Solo-play session tweaks, applied once and reverted when the bridge stops
+    // driving the camera:
+    //   * pauseOnLostFocus = false  (R.E.P.O. owns the focus while you play)
+    //   * server-side abilities     (fly + invulnerable, works without cheats)
+    private Boolean savedPauseOnLostFocus;
+    private boolean pauseOverridden;
+    private boolean serverTweaksApplied;
+    private Boolean savedMayfly;
+    private Boolean savedFlying;
+    private Boolean savedInvulnerable;
+    private boolean wasActive;
 
     private CameraSync(BridgeConfig config) {
         this.config = config;
@@ -134,9 +152,17 @@ public final class CameraSync {
         if (player == null || client.level == null) {
             worldSetupDone = false;
             seeded = false;
+            revertSessionTweaks(client);
+            wasActive = false;
             return;
         }
-        if (!isActive()) {
+        boolean active = isActive();
+        if (wasActive && !active) {
+            // R.E.P.O. went away: give Minecraft its own settings back.
+            revertSessionTweaks(client);
+        }
+        wasActive = active;
+        if (!active) {
             return;
         }
 
@@ -160,6 +186,47 @@ public final class CameraSync {
         smoothPitch = tpitch;
         seeded = true;
         applyToPlayer(player, smoothX, smoothY, smoothZ, tyaw, tpitch);
+        driveServerPlayer(client, smoothX, smoothY, smoothZ, tyaw, tpitch);
+    }
+
+    /**
+     * Solo play lives on the integrated server, and the integrated server is
+     * what decides which chunks get simulated. If it still thinks the player is
+     * standing at the spawn point, TNT lit 200 blocks away (i.e. right next to
+     * the R.E.P.O. camera) is never ticked and never explodes. Moving the
+     * server-side copy of the player to the camera pose makes chunk simulation,
+     * mobs and TNT follow the shared view - and it also means there is nothing
+     * left for the server to "correct" on the client.
+     */
+    private void driveServerPlayer(Minecraft client, double x, double y, double z, float yaw, float pitch) {
+        if (!config.driveServerPlayerInSingleplayer) {
+            return;
+        }
+        MinecraftServer server = client.getSingleplayerServer();
+        if (server == null || client.player == null) {
+            return; // multiplayer server: leave its authority alone
+        }
+        java.util.UUID uuid = client.player.getUUID();
+        server.execute(() -> {
+            try {
+                ServerPlayer serverPlayer = server.getPlayerList().getPlayer(uuid);
+                if (serverPlayer == null) {
+                    return;
+                }
+                serverPlayer.setPos(x, y, z);
+                serverPlayer.xOld = x;
+                serverPlayer.yOld = y;
+                serverPlayer.zOld = z;
+                serverPlayer.setYRot(yaw);
+                serverPlayer.setXRot(pitch);
+                serverPlayer.setDeltaMovement(Vec3.ZERO);
+                serverPlayer.setNoGravity(true);
+                serverPlayer.noPhysics = true;
+                serverPlayer.fallDistance = 0.0f;
+            } catch (Throwable t) {
+                McRepoBridge.LOGGER.debug("Could not move the server player: {}", t.toString());
+            }
+        });
     }
 
     private void applyToPlayer(LocalPlayer player, double x, double y, double z, float yaw, float pitch) {
@@ -205,6 +272,10 @@ public final class CameraSync {
             McRepoBridge.LOGGER.debug("Could not force first person view: {}", t.toString());
         }
 
+        if (config.keepRunningWhenUnfocused) {
+            setPauseOnLostFocus(client, false);
+        }
+
         if (config.requestCreativeMode) {
             MinecraftServer server = client.getSingleplayerServer();
             if (server != null) {
@@ -214,7 +285,159 @@ public final class CameraSync {
                     McRepoBridge.LOGGER.debug("Could not switch to creative mode: {}", t.toString());
                 }
             }
+            applyServerAbilities(client);
         }
+    }
+
+    /**
+     * The /gamemode command needs cheats, and without it a survival player
+     * cannot fly - so the camera would be yanked back to the ground. Setting the
+     * abilities straight on the integrated server's player copy works on any
+     * singleplayer world and is synced to the client by vanilla.
+     */
+    private void applyServerAbilities(Minecraft client) {
+        if (serverTweaksApplied) {
+            return;
+        }
+        MinecraftServer server = client.getSingleplayerServer();
+        if (server == null || client.player == null) {
+            return;
+        }
+        java.util.UUID uuid = client.player.getUUID();
+        serverTweaksApplied = true;
+        server.execute(() -> {
+            try {
+                ServerPlayer serverPlayer = server.getPlayerList().getPlayer(uuid);
+                if (serverPlayer == null) {
+                    serverTweaksApplied = false;
+                    return;
+                }
+                Abilities abilities = serverPlayer.getAbilities();
+                savedMayfly = abilities.mayfly;
+                savedFlying = abilities.flying;
+                savedInvulnerable = abilities.invulnerable;
+                abilities.mayfly = true;
+                abilities.flying = true;
+                abilities.invulnerable = true;
+                serverPlayer.onUpdateAbilities();
+            } catch (Throwable t) {
+                McRepoBridge.LOGGER.debug("Could not apply creative abilities: {}", t.toString());
+            }
+        });
+    }
+
+    private void revertSessionTweaks(Minecraft client) {
+        setPauseOnLostFocus(client, savedPauseOnLostFocus == null ? true : savedPauseOnLostFocus);
+        pauseOverridden = false;
+        savedPauseOnLostFocus = null;
+
+        if (!serverTweaksApplied) {
+            return;
+        }
+        MinecraftServer server = client.getSingleplayerServer();
+        if (server == null) {
+            serverTweaksApplied = false;
+            return;
+        }
+        java.util.UUID uuid = client.player == null ? null : client.player.getUUID();
+        server.execute(() -> {
+            try {
+                ServerPlayer serverPlayer = uuid == null ? null : server.getPlayerList().getPlayer(uuid);
+                if (serverPlayer != null) {
+                    Abilities abilities = serverPlayer.getAbilities();
+                    if (savedMayfly != null) {
+                        abilities.mayfly = savedMayfly;
+                    }
+                    if (savedFlying != null) {
+                        abilities.flying = savedFlying;
+                    }
+                    if (savedInvulnerable != null) {
+                        abilities.invulnerable = savedInvulnerable;
+                    }
+                    serverPlayer.setNoGravity(false);
+                    serverPlayer.noPhysics = false;
+                    serverPlayer.onUpdateAbilities();
+                }
+            } catch (Throwable t) {
+                McRepoBridge.LOGGER.debug("Could not restore player abilities: {}", t.toString());
+            }
+        });
+        serverTweaksApplied = false;
+        savedMayfly = null;
+        savedFlying = null;
+        savedInvulnerable = null;
+        worldSetupDone = false;
+    }
+
+    /**
+     * Solo play means R.E.P.O. holds the window focus, and vanilla pauses a
+     * singleplayer world 0.5 s after the Minecraft window loses it - TNT would
+     * freeze mid-fuse. This is the programmatic version of the F3 + P toggle
+     * (options.txt: pauseOnLostFocus), looked up reflectively so the mod still
+     * compiles if a future version moves or renames the field.
+     */
+    private void setPauseOnLostFocus(Minecraft client, boolean value) {
+        try {
+            Object target = client.options;
+            Field field = findField(Options.class, "pauseOnLostFocus");
+            if (field == null) {
+                target = client;
+                field = findField(Minecraft.class, "pauseOnLostFocus");
+            }
+            if (field == null) {
+                return;
+            }
+            field.setAccessible(true);
+            Object current = field.get(target);
+            if (current instanceof Boolean) {
+                if (!pauseOverridden) {
+                    savedPauseOnLostFocus = (Boolean) current;
+                    pauseOverridden = true;
+                }
+                if ((Boolean) current != value) {
+                    field.setBoolean(target, value);
+                }
+                return;
+            }
+            if (current != null) {
+                // Newer versions keep it as an OptionInstance<Boolean>.
+                Method setter = findMethod(current.getClass(), "set", Object.class);
+                if (setter != null) {
+                    setter.setAccessible(true);
+                    setter.invoke(current, Boolean.valueOf(value));
+                }
+            }
+        } catch (Throwable t) {
+            McRepoBridge.LOGGER.debug("Could not change pauseOnLostFocus: {}", t.toString());
+        }
+    }
+
+    private static Field findField(Class<?> type, String name) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static Method findMethod(Class<?> type, String name, Class<?> parameter) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredMethod(name, parameter);
+            } catch (NoSuchMethodException ignored) {
+                current = current.getSuperclass();
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private void syncFovPeriodically(Minecraft client) {

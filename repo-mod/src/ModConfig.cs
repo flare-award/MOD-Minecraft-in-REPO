@@ -9,6 +9,9 @@ namespace MinecraftInRepo
 {
     public sealed class ModConfig
     {
+        // [General]
+        public ConfigEntry<bool> SinglePlayerOnly;
+
         // [Net]
         public ConfigEntry<int> Port;
         public ConfigEntry<float> ConnectInterval;
@@ -50,6 +53,9 @@ namespace MinecraftInRepo
 
         public ModConfig(ConfigFile config)
         {
+            SinglePlayerOnly = config.Bind("General", "SinglePlayerOnly", true,
+                "Supported mode is solo play. When true (default) the mod idles completely in a multiplayer session: no camera sync, no overlay, no TNT damage. Set to false only if you host co-op on purpose.");
+
             Port = config.Bind("Net", "Port", 47621,
                 "TCP port of the Minecraft bridge (must match mc-mod config/mcrepo-bridge.json).");
             ConnectInterval = config.Bind("Net", "ConnectInterval", 2f,

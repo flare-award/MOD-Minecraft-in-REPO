@@ -18,6 +18,7 @@ namespace MinecraftInRepo.Overlay
         private BridgeClient bridge;
         private ExplosionRouter router;
         private CameraSync cameraSync;
+        private PlayModeGate gate;
 
         private GUIStyle statusStyle;
         private Texture2D statusBackground;
@@ -25,13 +26,14 @@ namespace MinecraftInRepo.Overlay
         private static readonly string[] Modes = { "FullScreen", "PiP", "Off" };
 
         public void Init(ModConfig modConfig, MinecraftCapture minecraftCapture, BridgeClient bridgeClient,
-            ExplosionRouter explosionRouter, CameraSync sync, ManualLogSource logger)
+            ExplosionRouter explosionRouter, CameraSync sync, PlayModeGate playModeGate, ManualLogSource logger)
         {
             config = modConfig;
             capture = minecraftCapture;
             bridge = bridgeClient;
             router = explosionRouter;
             cameraSync = sync;
+            gate = playModeGate;
             log = logger;
             modeIndex = Mathf.Max(0, System.Array.IndexOf(Modes, config.OverlayMode.Value));
         }
@@ -48,7 +50,8 @@ namespace MinecraftInRepo.Overlay
             GUI.depth = -10000;
 
             string mode = Modes[modeIndex];
-            Texture feed = capture.CurrentTexture;
+            bool idle = !gate.Allowed;
+            Texture feed = idle ? null : capture.CurrentTexture;
 
             if (mode != "Off" && feed != null)
             {
@@ -87,6 +90,11 @@ namespace MinecraftInRepo.Overlay
                 }
                 status += " | mode " + Modes[modeIndex] + " (F8)";
                 status += router.Enabled ? ", TNT live (F9)" : ", TNT disabled (F9)";
+                string gateStatus = gate.Status;
+                if (gateStatus != null)
+                {
+                    status += " | " + gateStatus;
+                }
                 GUI.Label(new Rect(8f, Screen.height - 26f, Screen.width - 16f, 22f), status, statusStyle);
             }
         }

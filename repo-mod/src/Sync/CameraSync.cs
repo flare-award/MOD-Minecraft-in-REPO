@@ -13,6 +13,7 @@ namespace MinecraftInRepo.Sync
         private ModConfig config;
         private CoordinateMap map;
         private BridgeClient bridge;
+        private PlayModeGate gate;
         private ManualLogSource log;
 
         private float lastSent = -1f;
@@ -20,18 +21,20 @@ namespace MinecraftInRepo.Sync
 
         public bool FollowEnabled { get; set; }
 
-        public void Init(ModConfig modConfig, CoordinateMap coordinateMap, BridgeClient bridgeClient, ManualLogSource logger)
+        public void Init(ModConfig modConfig, CoordinateMap coordinateMap, BridgeClient bridgeClient,
+            PlayModeGate playModeGate, ManualLogSource logger)
         {
             config = modConfig;
             map = coordinateMap;
             bridge = bridgeClient;
+            gate = playModeGate;
             log = logger;
             FollowEnabled = config.FollowEnabled.Value;
         }
 
         private void Update()
         {
-            if (!FollowEnabled || !bridge.Connected)
+            if (!FollowEnabled || !bridge.Connected || !gate.Allowed)
             {
                 return;
             }

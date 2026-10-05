@@ -26,11 +26,12 @@ namespace MinecraftInRepo
     {
         public const string PluginGuid = "com.flareaward.minecraftinrepo";
         public const string PluginName = "Minecraft in R.E.P.O.";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.1.0";
 
         internal static MinecraftInRepoPlugin Instance { get; private set; }
 
         private ModConfig config;
+        private PlayModeGate gate;
         private CoordinateMap map;
         private BridgeClient bridge;
         private CameraSync cameraSync;
@@ -47,20 +48,23 @@ namespace MinecraftInRepo
             GameObject host = new GameObject("MinecraftInRepo");
             Object.DontDestroyOnLoad(host);
 
+            gate = host.AddComponent<PlayModeGate>();
+            gate.Init(config, Logger);
+
             bridge = host.AddComponent<BridgeClient>();
             bridge.Init(config, Logger);
 
             router = host.AddComponent<ExplosionRouter>();
-            router.Init(config, map, Logger);
+            router.Init(config, map, gate, Logger);
 
             cameraSync = host.AddComponent<CameraSync>();
-            cameraSync.Init(config, map, bridge, Logger);
+            cameraSync.Init(config, map, bridge, gate, Logger);
 
             capture = host.AddComponent<MinecraftCapture>();
-            capture.Init(config, Logger);
+            capture.Init(config, gate, Logger);
 
             overlay = host.AddComponent<MinecraftOverlay>();
-            overlay.Init(config, capture, bridge, router, cameraSync, Logger);
+            overlay.Init(config, capture, bridge, router, cameraSync, gate, Logger);
 
             bridge.ExplosionReceived += router.Enqueue;
             bridge.PosReceived += cameraSync.OnMcPose;
@@ -69,7 +73,10 @@ namespace MinecraftInRepo
 
             Logger.LogInfo(string.Format(
                 "[MinecraftInRepo] {0} v{1} loaded. Waiting for Minecraft (bridge port {2}). " +
-                "Hotkeys: F6 camera follow, F7 calibrate, F8 overlay, F9 TNT damage.",
+                "Hotkeys: F6 camera follow, F7 calibrate, F8 overlay, F9 TNT damage. " +
+                (config.SinglePlayerOnly.Value
+                    ? "Mode: solo only (the mod idles in multiplayer sessions)."
+                    : "Mode: solo + co-op (SinglePlayerOnly=false)."),
                 PluginName, PluginVersion, config.Port.Value));
         }
 

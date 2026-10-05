@@ -23,7 +23,7 @@
     <RootNamespace>MinecraftInRepo</RootNamespace>
     <LangVersion>9.0</LangVersion>
     <Nullable>disable</Nullable>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Description>Puts real Minecraft inside R.E.P.O.: camera follow, window overlay, TNT that damages enemies, items, valuables and players.</Description>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>

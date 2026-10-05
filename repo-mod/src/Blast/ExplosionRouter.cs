@@ -27,6 +27,7 @@ namespace MinecraftInRepo.Blast
     {
         private ModConfig config;
         private CoordinateMap map;
+        private PlayModeGate gate;
         private ManualLogSource log;
 
         private readonly ConcurrentQueue<McExplosion> queue = new ConcurrentQueue<McExplosion>();
@@ -37,10 +38,11 @@ namespace MinecraftInRepo.Blast
         public bool Enabled { get; set; }
         public float LastBoomTime => lastBoomTime;
 
-        public void Init(ModConfig modConfig, CoordinateMap coordinateMap, ManualLogSource logger)
+        public void Init(ModConfig modConfig, CoordinateMap coordinateMap, PlayModeGate playModeGate, ManualLogSource logger)
         {
             config = modConfig;
             map = coordinateMap;
+            gate = playModeGate;
             log = logger;
             Enabled = config.BlastEnabled.Value;
         }
@@ -71,12 +73,13 @@ namespace MinecraftInRepo.Blast
 
         private void ApplyBlast(McExplosion explosion)
         {
-            lastBoomTime = Time.time;
-
-            if (!Enabled)
+            if (!Enabled || !gate.Allowed)
             {
+                // Solo-only guard: in a multiplayer session nothing is touched.
                 return;
             }
+
+            lastBoomTime = Time.time;
 
             Vector3 center = map.McToRepo(new Vector3((float)explosion.X, (float)explosion.Y, (float)explosion.Z));
             float power = Mathf.Max(0.1f, explosion.Power);

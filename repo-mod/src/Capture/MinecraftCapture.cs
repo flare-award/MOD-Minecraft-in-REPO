@@ -16,6 +16,7 @@ namespace MinecraftInRepo.Capture
     public sealed class MinecraftCapture : MonoBehaviour
     {
         private ModConfig config;
+        private PlayModeGate gate;
         private ManualLogSource log;
 
         private IntPtr hwnd = IntPtr.Zero;
@@ -29,9 +30,10 @@ namespace MinecraftInRepo.Capture
         public bool HasWindow => hwnd != IntPtr.Zero;
         public string WindowTitle { get; private set; }
 
-        public void Init(ModConfig modConfig, ManualLogSource logger)
+        public void Init(ModConfig modConfig, PlayModeGate playModeGate, ManualLogSource logger)
         {
             config = modConfig;
+            gate = playModeGate;
             log = logger;
             StartCoroutine(CaptureLoop());
         }
@@ -48,6 +50,13 @@ namespace MinecraftInRepo.Capture
                     continue;
                 }
                 captureAccumulator = 0f;
+
+                if (gate != null && !gate.Allowed)
+                {
+                    // Idle in multiplayer: do not burn CPU on window capture.
+                    CurrentTexture = null;
+                    continue;
+                }
 
                 if (hwnd == IntPtr.Zero || !Win32.IsWindow(hwnd))
                 {
