@@ -53,7 +53,8 @@ namespace MinecraftInRepo.Blast
             queue.Enqueue(explosion);
         }
 
-        private void Update()
+        /// <summary>Called from the plugin's own Update (see MinecraftInRepoPlugin).</summary>
+        public void Tick()
         {
             McExplosion explosion;
             int processed = 0;

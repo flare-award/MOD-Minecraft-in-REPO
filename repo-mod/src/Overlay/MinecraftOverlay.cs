@@ -46,6 +46,9 @@ namespace MinecraftInRepo.Overlay
             bannerUntil = Time.unscaledTime + 14f;
         }
 
+        /// <summary>True once Draw() has actually been called (diagnostics).</summary>
+        public bool GuiRan => loggedFirstGui;
+
         public void CycleMode()
         {
             modeIndex = (modeIndex + 1) % Modes.Length;
@@ -53,7 +56,8 @@ namespace MinecraftInRepo.Overlay
             log.LogInfo("[MinecraftInRepo] Overlay mode: " + Modes[modeIndex]);
         }
 
-        private void OnGUI()
+        /// <summary>Called from the plugin's own OnGUI (see MinecraftInRepoPlugin).</summary>
+        public void Draw()
         {
             if (!loggedFirstGui)
             {

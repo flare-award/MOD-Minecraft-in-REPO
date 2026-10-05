@@ -120,11 +120,19 @@ namespace UnityEngine
 
         public Transform transform { get; private set; }
         public bool activeSelf { get; private set; }
+        public bool activeInHierarchy { get; private set; }
+        public Scene scene { get; private set; }
 
         public void SetActive(bool value) { }
         public T AddComponent<T>() where T : Component, new() { return new T(); }
         public T GetComponent<T>() where T : Component { return null; }
         public T GetComponentInChildren<T>() where T : Component { return null; }
+    }
+
+    public struct Scene
+    {
+        public string name => string.Empty;
+        public bool isLoaded => false;
     }
 
     public class Transform : Component

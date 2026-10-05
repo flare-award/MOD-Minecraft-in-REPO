@@ -60,7 +60,8 @@ namespace MinecraftInRepo
             log = logger;
         }
 
-        private void Update()
+        /// <summary>Called from the plugin's own Update (see MinecraftInRepoPlugin).</summary>
+        public void Tick()
         {
             if (Time.unscaledTime < nextCheck)
             {

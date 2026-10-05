@@ -10,6 +10,7 @@
 // Hotkeys: F6 toggle camera follow, F7 calibrate world alignment,
 //          F8 cycle overlay mode, F9 toggle blast damage.
 
+using System.Threading;
 using BepInEx;
 using BepInEx.Logging;
 using MinecraftInRepo.Blast;
@@ -47,7 +48,11 @@ namespace MinecraftInRepo
             config = new ModConfig(Config);
             map = new CoordinateMap(config);
 
-            GameObject host = new GameObject("MinecraftInRepo");
+            // Put every component on BepInEx's own manager object: it is already
+            // DontDestroyOnLoad and - unlike a GameObject created by a plugin
+            // during chainloader startup - it is guaranteed to be ticked by
+            // Unity, so Update/OnGUI/coroutines actually run.
+            GameObject host = gameObject;
             Object.DontDestroyOnLoad(host);
 
             gate = host.AddComponent<PlayModeGate>();
@@ -74,6 +79,9 @@ namespace MinecraftInRepo
                 Logger.LogInfo("[MinecraftInRepo] Minecraft says hello: " + version);
 
             Logger.LogInfo("[MinecraftInRepo] Keyboard backend: " + InputHelper.Backend);
+            Logger.LogInfo("[MinecraftInRepo] Host object '" + host.name + "' scene=" + host.scene.name +
+                " active=" + host.activeInHierarchy + " enabled=" + enabled);
+            StartHeartbeat();
             Logger.LogInfo(string.Format(
                 "[MinecraftInRepo] {0} v{1} loaded. Waiting for Minecraft (bridge port {2}). " +
                 "Hotkeys: F6 camera follow, F7 calibrate, F8 overlay, F9 TNT damage. " +
@@ -90,6 +98,10 @@ namespace MinecraftInRepo
                 loggedFirstUpdate = true;
                 Logger.LogInfo("[MinecraftInRepo] Update loop running (keyboard backend: " + InputHelper.Backend + ").");
             }
+
+            gate.Tick();
+            cameraSync.Tick();
+            router.Tick();
 
             if (InputHelper.GetKeyDown(KeyCode.F6))
             {
@@ -112,6 +124,45 @@ namespace MinecraftInRepo
                 config.BlastEnabled.Value = router.Enabled;
                 Logger.LogInfo("[MinecraftInRepo] TNT damage in R.E.P.O.: " + (router.Enabled ? "armed" : "disarmed"));
             }
+        }
+
+        /// <summary>Drawn from the plugin itself so the overlay cannot be lost
+        /// together with a component Unity decided not to tick.</summary>
+        private void OnGUI()
+        {
+            overlay.Draw();
+        }
+
+        /// <summary>
+        /// A short-lived background heartbeat. It runs outside Unity's frame loop,
+        /// so it reports whether the plugin is alive even when Update/OnGUI are
+        /// not being called - which is exactly the failure we are hunting.
+        /// </summary>
+        private void StartHeartbeat()
+        {
+            Thread thread = new Thread(() =>
+            {
+                for (int i = 1; i <= 12; i++)
+                {
+                    Thread.Sleep(5000);
+                    string hostState;
+                    try
+                    {
+                        hostState = "scene=" + gameObject.scene.name + " active=" + gameObject.activeInHierarchy;
+                    }
+                    catch (System.Exception e)
+                    {
+                        hostState = "host unavailable: " + e.Message;
+                    }
+                    Logger.LogInfo(string.Format(
+                        "[MinecraftInRepo] heartbeat {0}s: update-ran={1} ongui-ran={2} connected={3} host[{4}]",
+                        i * 5, loggedFirstUpdate, overlay != null && overlay.GuiRan,
+                        bridge != null && bridge.Connected, hostState));
+                }
+            });
+            thread.IsBackground = true;
+            thread.Name = "MinecraftInRepo-Heartbeat";
+            thread.Start();
         }
     }
 }

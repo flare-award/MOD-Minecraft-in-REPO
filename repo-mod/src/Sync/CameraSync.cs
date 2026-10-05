@@ -32,7 +32,8 @@ namespace MinecraftInRepo.Sync
             FollowEnabled = config.FollowEnabled.Value;
         }
 
-        private void Update()
+        /// <summary>Called from the plugin's own Update (see MinecraftInRepoPlugin).</summary>
+        public void Tick()
         {
             if (!FollowEnabled || !bridge.Connected || !gate.Allowed)
             {
