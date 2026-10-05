@@ -39,6 +39,8 @@ namespace MinecraftInRepo
         private MinecraftOverlay overlay;
         private ExplosionRouter router;
 
+        private bool loggedFirstUpdate;
+
         private void Awake()
         {
             Instance = this;
@@ -71,6 +73,7 @@ namespace MinecraftInRepo
             bridge.HelloReceived += version =>
                 Logger.LogInfo("[MinecraftInRepo] Minecraft says hello: " + version);
 
+            Logger.LogInfo("[MinecraftInRepo] Keyboard backend: " + InputHelper.Backend);
             Logger.LogInfo(string.Format(
                 "[MinecraftInRepo] {0} v{1} loaded. Waiting for Minecraft (bridge port {2}). " +
                 "Hotkeys: F6 camera follow, F7 calibrate, F8 overlay, F9 TNT damage. " +
@@ -82,22 +85,28 @@ namespace MinecraftInRepo
 
         private void Update()
         {
-            if (UnityEngine.Input.GetKeyDown(KeyCode.F6))
+            if (!loggedFirstUpdate)
+            {
+                loggedFirstUpdate = true;
+                Logger.LogInfo("[MinecraftInRepo] Update loop running (keyboard backend: " + InputHelper.Backend + ").");
+            }
+
+            if (InputHelper.GetKeyDown(KeyCode.F6))
             {
                 cameraSync.FollowEnabled = !cameraSync.FollowEnabled;
                 config.FollowEnabled.Value = cameraSync.FollowEnabled;
                 Logger.LogInfo("[MinecraftInRepo] Camera follow: " + (cameraSync.FollowEnabled ? "on" : "off"));
             }
-            else if (UnityEngine.Input.GetKeyDown(KeyCode.F7))
+            else if (InputHelper.GetKeyDown(KeyCode.F7))
             {
                 Logger.LogInfo("[MinecraftInRepo] Calibrating worlds... stand where the two worlds should line up.");
                 cameraSync.RequestCalibration();
             }
-            else if (UnityEngine.Input.GetKeyDown(KeyCode.F8))
+            else if (InputHelper.GetKeyDown(KeyCode.F8))
             {
                 overlay.CycleMode();
             }
-            else if (UnityEngine.Input.GetKeyDown(KeyCode.F9))
+            else if (InputHelper.GetKeyDown(KeyCode.F9))
             {
                 router.Enabled = !router.Enabled;
                 config.BlastEnabled.Value = router.Enabled;

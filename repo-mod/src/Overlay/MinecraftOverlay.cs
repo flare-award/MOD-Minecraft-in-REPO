@@ -21,8 +21,12 @@ namespace MinecraftInRepo.Overlay
         private PlayModeGate gate;
 
         private GUIStyle statusStyle;
+        private GUIStyle bannerStyle;
         private Texture2D statusBackground;
+        private Texture2D bannerBackground;
         private int modeIndex;
+        private float bannerUntil;
+        private bool loggedFirstGui;
         private static readonly string[] Modes = { "FullScreen", "PiP", "Off" };
 
         public void Init(ModConfig modConfig, MinecraftCapture minecraftCapture, BridgeClient bridgeClient,
@@ -36,6 +40,10 @@ namespace MinecraftInRepo.Overlay
             gate = playModeGate;
             log = logger;
             modeIndex = Mathf.Max(0, System.Array.IndexOf(Modes, config.OverlayMode.Value));
+
+            // A short banner right after load: without it the only proof that the
+            // mod is alive is a one-line status at the bottom edge of the screen.
+            bannerUntil = Time.unscaledTime + 14f;
         }
 
         public void CycleMode()
@@ -47,6 +55,12 @@ namespace MinecraftInRepo.Overlay
 
         private void OnGUI()
         {
+            if (!loggedFirstGui)
+            {
+                loggedFirstGui = true;
+                log.LogInfo("[MinecraftInRepo] OnGUI running - the overlay/status line is being drawn.");
+            }
+
             GUI.depth = -10000;
 
             string mode = Modes[modeIndex];
@@ -78,25 +92,54 @@ namespace MinecraftInRepo.Overlay
                 GUI.color = previous;
             }
 
+            if (Time.unscaledTime < bannerUntil)
+            {
+                DrawBanner();
+            }
+
             if (config.ShowStatus.Value)
             {
                 EnsureStatusStyle();
-                string status = bridge.Connected
-                    ? "[Minecraft] linked" + (cameraSync.FollowEnabled ? ", camera following" : ", camera paused (F6)")
-                    : "[Minecraft] not connected (start Minecraft with the bridge mod)";
+
+                string link = bridge.Connected ? "[Minecraft] LINKED" : "[Minecraft] not connected";
+                string status = link
+                    + (cameraSync.FollowEnabled ? ", camera following" : ", camera paused (F6)")
+                    + " | overlay " + Modes[modeIndex] + " (F8)"
+                    + (router.Enabled ? " | TNT live (F9)" : " | TNT disabled (F9)");
                 if (capture.HasWindow)
                 {
-                    status += ", capturing \"" + capture.WindowTitle + "\"";
+                    status += " | capturing \"" + capture.WindowTitle + "\"";
                 }
-                status += " | mode " + Modes[modeIndex] + " (F8)";
-                status += router.Enabled ? ", TNT live (F9)" : ", TNT disabled (F9)";
+                if (!bridge.Connected)
+                {
+                    status += "  <- start Minecraft (Fabric 1.21.1) with mcrepo and load a world";
+                }
                 string gateStatus = gate.Status;
                 if (gateStatus != null)
                 {
                     status += " | " + gateStatus;
                 }
-                GUI.Label(new Rect(8f, Screen.height - 26f, Screen.width - 16f, 22f), status, statusStyle);
+
+                float height = 24f;
+                Rect rect = new Rect(8f, Screen.height - height - 8f, Mathf.Min(Screen.width - 16f, 1200f), height);
+                GUI.Box(rect, GUIContent.none, statusStyle);
+                GUI.Label(rect, status, statusStyle);
             }
+        }
+
+        /// <summary>Big "the mod is alive" banner for the first seconds after load.</summary>
+        private void DrawBanner()
+        {
+            EnsureBannerStyle();
+            float width = Mathf.Min(Screen.width - 40f, 720f);
+            float height = 92f;
+            Rect rect = new Rect((Screen.width - width) * 0.5f, 24f, width, height);
+            GUI.Box(rect, GUIContent.none, bannerStyle);
+            GUI.Label(rect,
+                "Minecraft in R.E.P.O. v" + MinecraftInRepoPlugin.PluginVersion + " is running\n" +
+                "F6 camera follow   F7 calibrate   F8 overlay (now: " + Modes[modeIndex] + ")   F9 TNT damage\n" +
+                (bridge.Connected ? "Minecraft: LINKED" : "Minecraft: not connected (start the Fabric 1.21.1 game)"),
+                bannerStyle);
         }
 
         private Rect PipRect(int feedWidth, int feedHeight)
@@ -127,14 +170,40 @@ namespace MinecraftInRepo.Overlay
             {
                 return;
             }
-            statusBackground = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            statusStyle = new GUIStyle
+            statusBackground = SolidTexture(new Color(0f, 0f, 0f, 0.55f));
+            statusStyle = new GUIStyle(GUI.skin.label)
             {
-                fontSize = 14,
-                alignment = TextAnchor.MiddleLeft
+                fontSize = 16,
+                alignment = TextAnchor.MiddleLeft,
+                padding = new RectOffset(8, 8, 2, 2)
             };
             statusStyle.normal.background = statusBackground;
-            statusStyle.normal.textColor = new Color(0.9f, 1f, 0.9f, 1f);
+            statusStyle.normal.textColor = new Color(0.85f, 1f, 0.85f, 1f);
+        }
+
+        private void EnsureBannerStyle()
+        {
+            if (bannerStyle != null)
+            {
+                return;
+            }
+            bannerBackground = SolidTexture(new Color(0f, 0f, 0f, 0.75f));
+            bannerStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 18,
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(12, 12, 8, 8)
+            };
+            bannerStyle.normal.background = bannerBackground;
+            bannerStyle.normal.textColor = new Color(1f, 1f, 1f, 1f);
+        }
+
+        private static Texture2D SolidTexture(Color color)
+        {
+            Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            texture.SetPixel(0, 0, color);
+            texture.Apply(false, true);
+            return texture;
         }
     }
 }
