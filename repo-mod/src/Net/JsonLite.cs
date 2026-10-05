@@ -55,6 +55,29 @@ namespace MinecraftInRepo.Net
             return fallback;
         }
 
+        /// <summary>Reads a boolean that may arrive as JSON true/false, as 0/1 or as "true"/"1".</summary>
+        public static bool GetBool(Dictionary<string, object> obj, string key, bool fallback = false)
+        {
+            object value;
+            if (obj != null && obj.TryGetValue(key, out value))
+            {
+                if (value is bool b)
+                {
+                    return b;
+                }
+                if (value is double d)
+                {
+                    return d != 0.0;
+                }
+                if (value is string s)
+                {
+                    return s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                           s.Equals("yes", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            return fallback;
+        }
+
         private static Dictionary<string, object> ReadObject(string json, ref int i)
         {
             Dictionary<string, object> result = new Dictionary<string, object>();

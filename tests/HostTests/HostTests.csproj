@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Unit tests for the parts of the host plugin that must not depend on Unity or
+    BepInEx: the ownership state machine, the guest state message, the host
+    state message and the voxelised collision region.
+
+    The sources are linked straight out of repo-mod/src, so the tests compile and
+    run in CI with no R.E.P.O. install, no game assemblies and no stubs.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MinecraftInRepo.Tests</RootNamespace>
+    <AssemblyName>HostTests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../repo-mod/src/Host/Ownership.cs" Link="Host/Ownership.cs" />
+    <Compile Include="../../repo-mod/src/Host/GuestState.cs" Link="Host/GuestState.cs" />
+    <Compile Include="../../repo-mod/src/Host/HostState.cs" Link="Host/HostState.cs" />
+    <Compile Include="../../repo-mod/src/Host/VoxelRegion.cs" Link="Host/VoxelRegion.cs" />
+    <Compile Include="../../repo-mod/src/Net/JsonLite.cs" Link="Net/JsonLite.cs" />
+  </ItemGroup>
+
+</Project>

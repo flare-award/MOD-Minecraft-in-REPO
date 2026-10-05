@@ -6,6 +6,17 @@ on:
   workflow_dispatch:
 
 jobs:
+  host-tests:
+    name: Host plugin - ownership and protocol tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Run the host-side unit tests (no game needed)
+        run: dotnet test tests/HostTests/HostTests.csproj -c Release --nologo
+
   repo-mod-stubs:
     name: R.E.P.O. mod - offline stub references
     runs-on: ubuntu-latest

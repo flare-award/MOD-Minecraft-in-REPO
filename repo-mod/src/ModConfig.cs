@@ -12,6 +12,10 @@ namespace MinecraftInRepo
         // [General]
         public ConfigEntry<bool> SinglePlayerOnly;
 
+        // [HostGuest] - the PeakCraft-style redesign: Minecraft owns the body.
+        public ConfigEntry<bool> HostGuestMode;
+        public ConfigEntry<int> GuestPort;
+
         // [Net]
         public ConfigEntry<int> Port;
         public ConfigEntry<float> ConnectInterval;
@@ -55,6 +59,11 @@ namespace MinecraftInRepo
         {
             SinglePlayerOnly = config.Bind("General", "SinglePlayerOnly", true,
                 "Supported mode is solo play. When true (default) the mod idles completely in a multiplayer session: no camera sync, no overlay, no TNT damage. Set to false only if you host co-op on purpose.");
+
+            HostGuestMode = config.Bind("HostGuest", "Enabled", false,
+                "EXPERIMENTAL (phase 1 of the host/guest redesign): link to Minecraft as a guest that owns the player's body instead of only following the camera. Off by default - with it off the mod behaves exactly as before. Needs a Fabric mod that speaks protocol v2.");
+            GuestPort = config.Bind("HostGuest", "Port", 25671,
+                "TCP port of the v2 guest link (docs/PROTOCOL-V2.md). Separate from [Net] Port so the v1 camera-follow bridge keeps working.");
 
             Port = config.Bind("Net", "Port", 47621,
                 "TCP port of the Minecraft bridge (must match mc-mod config/mcrepo-bridge.json).");

@@ -15,6 +15,7 @@ using BepInEx;
 using BepInEx.Logging;
 using MinecraftInRepo.Blast;
 using MinecraftInRepo.Capture;
+using MinecraftInRepo.Host;
 using MinecraftInRepo.Net;
 using MinecraftInRepo.Overlay;
 using MinecraftInRepo.Sync;
@@ -39,6 +40,19 @@ namespace MinecraftInRepo
         private MinecraftCapture capture;
         private MinecraftOverlay overlay;
         private ExplosionRouter router;
+
+        // Host/guest link (protocol v2). Null unless [HostGuest] Enabled is true,
+        // in which case the mod behaves exactly as before.
+        private GuestLink guestLink;
+        private Ownership ownership;
+        private HostState hostState;
+        private long teleportSeq;
+        private bool handoffRequested;
+        private float nextGuestSummary;
+
+        /// <summary>Distance from the host camera down to the character's feet.
+        /// A placeholder until the phase-0 recon measures the real value.</summary>
+        private const float HostEyeToFeet = 1.7f;
 
         private bool loggedFirstUpdate;
 
@@ -77,6 +91,22 @@ namespace MinecraftInRepo
             bridge.PosReceived += cameraSync.OnMcPose;
             bridge.HelloReceived += version =>
                 Logger.LogInfo("[MinecraftInRepo] Minecraft says hello: " + version);
+
+            if (config.HostGuestMode.Value)
+            {
+                guestLink = new GuestLink(message => Logger.LogInfo("[MinecraftInRepo] " + message),
+                    "127.0.0.1", config.GuestPort.Value);
+                guestLink.ExplosionReceived += router.Enqueue;
+                guestLink.GuestEvent += kind =>
+                    Logger.LogInfo("[MinecraftInRepo] guest event: " + kind);
+                guestLink.HelloReceived += version =>
+                    Logger.LogInfo("[MinecraftInRepo] guest says hello: " + version);
+                guestLink.Start();
+                ownership = new Ownership();
+                Logger.LogInfo("[MinecraftInRepo] Host/guest link armed on port " +
+                    config.GuestPort.Value + " (protocol v2, docs/PROTOCOL-V2.md). " +
+                    "Phase 1: link and ownership only - the body stays with R.E.P.O.");
+            }
 
             Logger.LogInfo("[MinecraftInRepo] Keyboard backend: " + InputHelper.Backend);
             Logger.LogInfo("[MinecraftInRepo] Host object '" + host.name + "' scene=" + host.scene.name +
@@ -192,6 +222,11 @@ namespace MinecraftInRepo
             cameraSync.Tick();
             router.Tick();
 
+            if (guestLink != null)
+            {
+                TickGuestLink();
+            }
+
             if (InputHelper.GetKeyDown(KeyCode.F6))
             {
                 cameraSync.FollowEnabled = !cameraSync.FollowEnabled;
@@ -212,6 +247,85 @@ namespace MinecraftInRepo
                 router.Enabled = !router.Enabled;
                 config.BlastEnabled.Value = router.Enabled;
                 Logger.LogInfo("[MinecraftInRepo] TNT damage in R.E.P.O.: " + (router.Enabled ? "armed" : "disarmed"));
+            }
+        }
+
+        /// <summary>
+        /// Phase 1 of the host/guest redesign: keep the v2 link up, decide who owns
+        /// the player, and publish the host state. Nothing moves yet - that is
+        /// phases 2 and 3 (collision export, follower, camera, input).
+        /// </summary>
+        private void TickGuestLink()
+        {
+            guestLink.Tick();
+
+            bool linkUp = guestLink.LinkUp;
+            if (linkUp && !handoffRequested)
+            {
+                handoffRequested = true;
+                teleportSeq++;
+            }
+            else if (!linkUp)
+            {
+                handoffRequested = false;
+            }
+
+            Camera camera = Camera.main;
+            bool hasCharacter = gate.Allowed && camera != null;
+
+            Vector3 feet = hasCharacter
+                ? map.RepoToMc(camera.transform.position - new Vector3(0f, HostEyeToFeet, 0f))
+                : Vector3.zero;
+
+            ownership.BeginFrame();
+            Owner owner = ownership.Decide(new OwnershipInputs
+            {
+                LinkUp = linkUp,
+                HasCharacter = hasCharacter,
+                Cutscene = false,          // phase 0: the cutscene list comes from docs/REPO-NOTES.md
+                HostMenuOpen = false,      // phase 5
+                TeleportPending = handoffRequested && guestLink.Guest.TeleportAck != teleportSeq,
+                GuestDead = guestLink.Guest.Dead
+            });
+
+            if (ownership.Changed)
+            {
+                Logger.LogInfo(string.Format(
+                    "[MinecraftInRepo] owner {0} -> {1} ({2})",
+                    ownership.Previous, owner, ownership.Reason));
+                if (ownership.ReleaseGuestKeys)
+                {
+                    guestLink.SendReleaseAll();
+                }
+            }
+
+            hostState.Owner = owner;
+            hostState.TeleportSeq = teleportSeq;
+            hostState.Loading = ownership.SendLoadingFlag;
+            hostState.MenuOpen = ownership.SendMenuOpenFlag;
+            hostState.ViewportWidth = Screen.width;
+            hostState.ViewportHeight = Screen.height;
+            hostState.X = feet.x;
+            hostState.Y = feet.y;
+            hostState.Z = feet.z;
+            if (hasCharacter)
+            {
+                Vector3 forward = camera.transform.forward;
+                hostState.Yaw = CoordinateMap.UnityYaw(forward);
+                hostState.Pitch = -Mathf.Asin(Mathf.Clamp(forward.y, -1f, 1f)) * Mathf.Rad2Deg;
+            }
+            guestLink.Publish(hostState);
+
+            if (Time.unscaledTime >= nextGuestSummary)
+            {
+                nextGuestSummary = Time.unscaledTime + 1f;
+                GuestState guest = guestLink.Guest;
+                Logger.LogInfo(string.Format(
+                    "[MinecraftInRepo] hg: owner={0} link={1} age={2}ms guest=({3:0.00},{4:0.00},{5:0.00}) " +
+                    "hp={6:0.0} ack={7}/{8} frames={9}",
+                    owner, linkUp ? "up" : "down", guestLink.GuestAgeMs,
+                    guest.X, guest.Y, guest.Z, guest.Health,
+                    guest.TeleportAck, teleportSeq, guestLink.HostSeq));
             }
         }
 
