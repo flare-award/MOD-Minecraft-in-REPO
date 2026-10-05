@@ -1,6 +1,6 @@
 // The host's (R.E.P.O.'s) published state, sent once per frame.
 //
-//   {"t":"hs","seq":n,"t":ms,"owner":"GuestOwns","tseq":n,"loading":true,"menu":false,
+//   {"t":"hs","seq":n,"ms":91234,"owner":"GuestOwns","tseq":n,"loading":true,"menu":false,
 //    "vpw":1920,"vph":1080,"x":..,"y":..,"z":..,"yaw":..,"pitch":..}
 //
 // The guest paces its frames on "seq" and takes the teleport handshake from
@@ -42,7 +42,7 @@ namespace MinecraftInRepo.Host
             return JsonLite.WriteObject(
                 "t", "hs",
                 "seq", Seq,
-                "t", TimestampMs,
+                "ms", TimestampMs,
                 "owner", Owner.ToString(),
                 "tseq", TeleportSeq,
                 "loading", Loading,
