@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Recon tool: dumps the interesting surface of a Unity game's Assembly-CSharp
+    into a markdown notes file, so patch points (input sampler, movement step,
+    camera update, hazard funnel, death) can be found without decompiling the
+    whole game.
+
+    Uses System.Reflection.Metadata from the shared framework: no NuGet restore,
+    so it also works on a machine with restricted network access.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>ApiDump</AssemblyName>
+    <RootNamespace>ApiDump</RootNamespace>
+  </PropertyGroup>
+
+</Project>

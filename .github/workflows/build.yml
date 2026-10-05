@@ -74,3 +74,18 @@ jobs:
           path: |
             mc-mod/build/libs/*.jar
             !mc-mod/build/libs/*-sources.jar
+
+  tools-recon:
+    name: Recon tool - ApiDump builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Build the API dumper
+        run: dotnet build tools/ApiDump/ApiDump.csproj -c Release --nologo
+      - name: Smoke test - dump the stub assembly
+        run: |
+          dotnet run --project tools/ApiDump/ApiDump.csproj -c Release --no-build -- \
+            repo-mod/libs/stubs tools/REPO-NOTES-SAMPLE.md Assembly-CSharp.dll "Plugin;Player;Camera"
