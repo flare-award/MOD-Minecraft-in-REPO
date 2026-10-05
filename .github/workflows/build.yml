@@ -85,7 +85,10 @@ jobs:
           dotnet-version: '9.0.x'
       - name: Build the API dumper
         run: dotnet build tools/ApiDump/ApiDump.csproj -c Release --nologo
-      - name: Smoke test - dump the stub assembly
+      - name: Build the stub reference assembly (input for the smoke test)
+        run: dotnet build repo-mod/Stubs/StubAssemblies.csproj -c Release --nologo
+      - name: Smoke test - dump the stub assembly's API surface
         run: |
           dotnet run --project tools/ApiDump/ApiDump.csproj -c Release --no-build -- \
-            repo-mod/libs/stubs tools/REPO-NOTES-SAMPLE.md Assembly-CSharp.dll "Plugin;Player;Camera"
+            repo-mod/libs/stubs "$RUNNER_TEMP/REPO-NOTES-SAMPLE.md" Assembly-CSharp.dll "Plugin;Player;Camera"
+          head -20 "$RUNNER_TEMP/REPO-NOTES-SAMPLE.md"
