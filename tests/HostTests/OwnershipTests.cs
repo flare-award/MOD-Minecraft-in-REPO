@@ -85,7 +85,7 @@ namespace MinecraftInRepo.Tests
             OwnershipInputs cutscene = Linked();
             cutscene.Cutscene = true;
             Assert.Equal(Owner.Cutscene, Decide(ownership, cutscene));
-            Assert.True(ownership.HostMovementEnabled == false);
+            Assert.False(ownership.HostMovementEnabled);
             Assert.True(ownership.HostCameraActive);
             Assert.True(ownership.SendLoadingFlag);
 

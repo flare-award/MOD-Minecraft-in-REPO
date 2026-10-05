@@ -19,18 +19,18 @@ namespace MinecraftInRepo.Tests
             GuestState state;
             Assert.True(GuestState.TryParse(msg, out state));
 
-            Assert.Equal(41, state.Seq);
+            Assert.Equal(41L, state.Seq);
             Assert.Equal(10.5, state.X);
             Assert.Equal(64.0, state.Y);
             Assert.Equal(-3.25, state.Z);
             Assert.Equal(10.0, state.PX);
-            Assert.Equal(-90.0, state.Yaw);
-            Assert.Equal(1.62, state.EyeHeight);
+            Assert.Equal(-90f, state.Yaw);
+            Assert.Equal(1.62f, state.EyeHeight);
             Assert.Equal(1, state.CameraMode);
-            Assert.Equal(14.0, state.Health);
+            Assert.Equal(14f, state.Health);
             Assert.False(state.Dead);
             Assert.True(state.ScreenOpen);
-            Assert.Equal(7, state.TeleportAck);
+            Assert.Equal(7L, state.TeleportAck);
             Assert.True(state.IsCreative);
         }
 
@@ -53,8 +53,8 @@ namespace MinecraftInRepo.Tests
             GuestState state;
             Assert.True(GuestState.TryParse(msg, out state));
             Assert.Equal(50f, state.TickPeriodMs);
-            Assert.Equal(1.62, state.EyeHeight);
-            Assert.Equal(20.0, state.MaxHealth);
+            Assert.Equal(1.62f, state.EyeHeight);
+            Assert.Equal(20f, state.MaxHealth);
         }
 
         [Fact]

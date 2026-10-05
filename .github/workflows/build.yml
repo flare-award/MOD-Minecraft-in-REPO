@@ -15,7 +15,20 @@ jobs:
         with:
           dotnet-version: '9.0.x'
       - name: Run the host-side unit tests (no game needed)
-        run: dotnet test tests/HostTests/HostTests.csproj -c Release --nologo
+        id: hosttests
+        run: |
+          set -o pipefail
+          dotnet test tests/HostTests/HostTests.csproj -c Release --nologo 2>&1 | tee host-tests.log
+      - name: Report the failure as job annotations
+        if: failure() && steps.hosttests.outcome == 'failure'
+        run: |
+          grep -Ei "error|failed|assert|expected|actual|exception" host-tests.log | head -25 | \
+            while IFS= read -r line; do echo "::error::$line"; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-tests-log
+          path: host-tests.log
 
   repo-mod-stubs:
     name: R.E.P.O. mod - offline stub references
