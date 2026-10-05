@@ -226,6 +226,7 @@ R.E.P.O. У фитиля 4 секунды — этого хватает, но в
 
 | Симптом | Решение |
 |---|---|
+| **В логе BepInEx: `0 plugins to load`** (и в игре нет статус-строки) | BepInEx не видит DLL — см. раздел «Куда именно класть DLL» ниже. |
 | `not connected` в статусе | Minecraft не запущен или это не Fabric 1.21.1 с модом. Проверьте `latest.log` на строку `Bridge listening on 127.0.0.1:47621` и одинаковый порт в `config\mcrepo-bridge.json` и `Net.Port` в R.E.P.O. |
 | Оверлей чёрный | Окно Minecraft свёрнуто или ваш GPU/драйвер не отдаёт внеэкранный захват OpenGL. Разверните окно, поставьте R.E.P.O. в оконный режим, чтобы Minecraft был хотя бы частично виден. |
 | Minecraft встаёт на паузу | Должно лечиться само (`keepRunningWhenUnfocused`). Иначе нажмите в Minecraft `F3 + P` или выставьте `pauseOnLostFocus:false` в `options.txt`. |
@@ -235,5 +236,48 @@ R.E.P.O. У фитиля 4 секунды — этого хватает, но в
 | Вид Minecraft дёргается/откатывается | Перекалибруйтесь F7; проверьте предупреждения миксинов в `latest.log` (нужен `IgnorePositionCorrectionMixin`). |
 | Мод «молчит» в кооперативе | Так и задумано: `General.SinglePlayerOnly = true`. Для сети — `false` и быть хостом (не рекомендуется). |
 | Ошибка `Dependency requires at least JVM runtime version 25` при сборке | Нужен JDK 25 для Gradle — см. `README-RU.md`, раздел 3. |
+
+### Куда именно класть `MinecraftInRepo.dll` (ошибка `0 plugins to load`)
+
+BepInEx загружает только DLL из папки `BepInEx\plugins` **того экземпляра игры,
+который вы реально запускаете**. Самые частые ошибки:
+
+1. **Вы играете через r2modman/Gale, а DLL положили в папку игры в Steam.**
+   r2modman запускает игру из своей папки профиля. Класть нужно сюда:
+   ```
+   %APPDATA%\r2modmanPlus-local\REPO\profiles\<имя профиля>\BepInEx\plugins\
+   ```
+   и запускать игру **кнопкой Start modded в r2modman**, а не через Steam —
+   иначе профиль (и моды) не подхватываются.
+2. **Вы ставили BepInEx вручную в папку игры** — тогда путь такой:
+   ```
+   C:\Program Files (x86)\Steam\steamapps\common\REPO\BepInEx\plugins\
+   ```
+3. Папка называется **`plugins`** (строчными), а не `Plugins`/`plugin`/`patchers`.
+4. Файл должен называться ровно `MinecraftInRepo.dll` (не `...dll.dll` —
+   проверьте, что в проводнике включено отображение расширений) и весить
+   около 20 КБ. Скачанный из GitHub артефакт — это zip, его надо распаковать;
+   если Windows пометила файл как загруженный, снимите блокировку:
+   `Unblock-File .\MinecraftInRepo.dll`.
+
+Проверить, куда делся файл, и сразу положить его правильно:
+
+```powershell
+# где лежит игра и есть ли DLL в её BepInEx
+$game = "C:\Program Files (x86)\Steam\steamapps\common\REPO"   # поправьте путь
+Get-ChildItem $game -Recurse -Filter "MinecraftInRepo.dll" -ErrorAction SilentlyContinue |
+    Select-Object FullName, Length
+
+# папки профилей r2modman (если пользуетесь им)
+Get-ChildItem "$env:APPDATA\r2modmanPlus-local\REPO\profiles" -Directory |
+    ForEach-Object { Join-Path $_.FullName "BepInEx\plugins" }
+
+# положить DLL в папку игры (сборка + установка одной командой)
+.\scripts\build-repo-mod.ps1 -RepoGameDir $game -Install
+```
+
+После перезапуска в логе должно стать `1 plugins to load` и появиться строка
+`Minecraft in R.E.P.O. v1.1.0 loaded.` — только после этого имеет смысл
+проверять подключение к Minecraft.
 
 Логи: R.E.P.O. — `BepInEx\LogOutput.log`, Minecraft — `.minecraft\logs\latest.log`.
