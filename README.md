@@ -114,6 +114,8 @@ Fabric profile — the capture follows whatever window is titled "Minecraft*".
 | Camera.AlignmentYawDeg | 0 | World alignment yaw (set by F7) |
 | Map.McOrigin* / Map.RepoAnchor* | 0 | Mapping anchors (set by F7) |
 | Map.Scale | 1.0 | R.E.P.O. meters per Minecraft block |
+| HostGuest.Enabled | false | EXPERIMENTAL: protocol v2 link — Minecraft owns the player's body ([docs/PLAN-HOST-GUEST-RU.md](docs/PLAN-HOST-GUEST-RU.md)). Off = the classic camera-follow mod. |
+| HostGuest.Port | 25671 | TCP port of the v2 guest link ([docs/PROTOCOL-V2.md](docs/PROTOCOL-V2.md)) |
 | Blast.RadiusPerPower | 1.5 | Blast radius = power × this (TNT power = 4) |
 | Blast.MaxEnemyDamage | 90 | Point-blank enemy damage |
 | Blast.MaxPlayerDamage | 45 | Point-blank player damage |

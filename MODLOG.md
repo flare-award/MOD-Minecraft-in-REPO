@@ -1,202 +1,368 @@
-# MODLOG — Minecraft in R.E.P.O.
+# Minecraft in R.E.P.O.
 
-Development journal (per `AGENTS.md`). Session of 2026-10-03.
+*[Русская версия: справочник [README-RU.md](README-RU.md) и пошаговый туториал
+[TUTORIAL-RU.md](TUTORIAL-RU.md) — Russian guide and start-to-finish
+walkthrough, from installation to the first TNT blast]*
 
-## Request
+**Put real Minecraft inside R.E.P.O.** Minecraft's camera follows the R.E.P.O.
+camera, the live Minecraft window is rendered inside the game, and TNT you
+detonate in Minecraft blows up R.E.P.O.'s enemies, items, valuables — and your
+own crew.
 
-> Put real Minecraft inside R.E.P.O. Minecraft's camera should follow
-> R.E.P.O.'s, and its TNT should blow up enemies, items, valuables and players.
+Two games, one shared world:
 
-## Recon
+```
++--------------------------+        TCP 127.0.0.1:47621        +--------------------------+
+|        R.E.P.O.          |  -------------------------------  |        Minecraft         |
+|  (BepInEx plugin)        |   camera pose  (60 Hz)            |  (Fabric mod, 1.21.1)    |
+|                          |  ------------------------------>  |                          |
+|  MinecraftInRepo.dll     |   explosions   (event lines)      |  mcrepo-1.1.0.jar        |
+|  - window capture        |  <------------------------------- |  - moves the player to   |
+|  - in-game overlay       |                                   |    the R.E.P.O. camera   |
+|  - blast damage          |                                   |  - reports every boom    |
++--------------------------+                                   +--------------------------+
+```
 
-- The checkout contained only the universal-modder toolkit docs; no mod code
-  existed yet. R.E.P.O. (semiwork) is a Unity 2022.3 Mono game, modded with
-  BepInEx 5.4.23.x (confirmed via the R.E.P.O. Modding Wiki, repomods.com,
-  and Thunderstore's BepInExPack).
-- The community wiki recommends `Linkoid.Repo.Plugin.Build` +
-  `R.E.P.O.GameLibs.Steam` NuGet for references; many shipping mods instead
-  reference `<game>/REPO_Data/Managed/*.dll` directly. Both routes are
-  supported by the csproj here, plus an offline stub mode.
-- Verified game API symbols by cloning public mods that compile against the
-  real assemblies:
-  - `jkieley/repo-live-control` → `PlayerHealth.HurtOther(int, Vector3, bool,
-    int, bool)`, `PlayerAvatar.ForceImpulse/PlayerDeath/Revive`,
-    `PlayerHealth.health/maxHealth` fields, Photon RPC patterns.
-  - `Lillious-Networks/R.E.P.O-Mod-Library` → `PlayerHealth.Hurt(int, bool)`,
-    `LevelGenerator.Instance/Generated`, `EnemyHealth.dead` field, item tag
-    `Phys Grab Object`, `ValuableObject.dollarValueCurrent`.
-  - `layfhaker/parry-mod` → `PhysGrabObjectImpactDetector.DestroyObject(bool)`
-    + `destroyDisable` (the vanilla shatter path), `SemiFunc.PlayerGetLocal`,
-    `SemiFunc.IsMasterClientOrSingleplayer`, reflection patterns for
-    `EnemyRigidbody.rb`.
-  - Wiki research docs (Repo-Assess/REPOCAOS analyses) → `EnemyHealth.Hurt(int,
-    Vector3)` is the central host-authoritative enemy damage entry point.
+## Features
 
-## Route
+- **Real Minecraft inside R.E.P.O.** — the actual Minecraft window is captured
+  (PrintWindow/BitBlt) and drawn as a ghost overlay or picture-in-picture.
+- **Camera follow** — the R.E.P.O. camera pose is streamed to Minecraft, which
+  moves its player to match (smoothed per render frame, with corrections
+  suppressed). FOV is synced too.
+- **TNT that matters** — explosions in Minecraft (TNT, creepers, beds, end
+  crystals) are mapped back into R.E.P.O. world space and damage
+  `EnemyHealth`, `PlayerHealth`, and fling/shatter items & valuables through
+  the game's own physics and destruction paths.
+- **One-key calibration (F7)** — stand somewhere, press F7, and the mod
+  computes the rotation/translation between the two worlds from the two
+  cameras' current poses.
+- No Harmony patches of game code, no fabric-api dependency, no asset bundles:
+  everything is additive, and the bridge is loopback-only.
+- **Solo-first.** Singleplayer is the supported mode: the R.E.P.O. plugin idles
+  completely as soon as it detects a multiplayer session (`General.SinglePlayerOnly`
+  defaults to `true`), so co-op stays vanilla-clean instead of half-working.
+  Minecraft gets three solo-friendly tweaks for free: no auto-pause when its
+  window loses focus, the integrated server's player copy follows the camera
+  (so TNT far from spawn still ticks and explodes), and creative flight without
+  needing cheats.
 
-Two cooperating mods + local bridge:
+## Requirements
 
-1. `mc-mod/` — Fabric client mod for Minecraft 1.21.1 (pinned; yarn
-   `1.21.1+build.3`, loader 0.16.9). No fabric-api dependency; all hooks are
-   plain Mixins. Runs a loopback TCP bridge, moves the player to follow the
-   R.E.P.O. camera, broadcasts explosions.
-2. `repo-mod/` — BepInEx plugin. Connects to the bridge, streams the
-   R.E.P.O. camera, captures the Minecraft window (PrintWindow/BitBlt) into
-   an in-game overlay, and converts explosions into R.E.P.O. damage.
+| Side | What |
+|---|---|
+| R.E.P.O. | Windows install + [BepInEx 5.4.23.x](https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/) |
+| Minecraft | Minecraft **1.21.1** with [Fabric loader](https://fabricmc.net/use/) (any Fabric profile/installation) |
+| Both | The two files from this repo's [Releases/CI artifacts](#building-from-source) |
 
-Rejected alternatives:
-- CEF/overlay-browser inside Unity for Minecraft Classic/Eaglercraft: not
-  "real Minecraft", heavy native dependencies.
-- Voxel re-implementation inside Unity: not real Minecraft either.
-- Shared-memory camera sync: no advantage over TCP on loopback.
+> Play fair: use this in your own singleplayer runs or with friends who are in
+> on it. The mod changes PvE co-op gameplay; it is not a tool for messing with
+> strangers' sessions.
 
-## Key decisions
+## Install
 
-- **Protocol**: newline-delimited JSON (`cam`, `getpos`, `boom`, `ping`,
-  `hello`, `pos`, `pong`). Full spec in docs/ARCHITECTURE.md.
-- **Camera math**: directions are converted analytically
-  (`yaw = atan2(-look.x, look.z)`, `pitch = asin(-look.y)`), so the
-  Unity/MC handedness difference collapses into a single configurable
-  alignment yaw. F7 calibration derives translation + yaw from the two
-  cameras' live poses.
-- **Camera smoothness**: Minecraft applies the pose every *render frame*
-  (GameRenderer.render HEAD mixin, exponential smoothing) with a 20 Hz tick
-  fallback; server position corrections are cancelled while the pose stream
-  is fresh. The player is kept docile (flying, invulnerable, noClip, zero
-  input) so vanilla physics never fights the camera.
-- **Damage authority**: R.E.P.O. syncs health from the master client, so
-  damage is applied only when `IsMasterClientOrSingleplayer()`; non-hosts
-  keep overlay/camera/flash/local knockback. This mirrors how every serious
-  R.E.P.O. gameplay mod handles damage.
-- **Item destruction** goes through the game's own
-  `PhysGrabObjectImpactDetector.DestroyObject` path (host-only) instead of
-  `Object.Destroy`, keeping multiplayer state coherent. Knockback uses real
-  physics (`AddExplosionForce`, `ForceImpulse`).
-- **Resilience**: TNT hook targets the ancient, stable `TntEntity.explode()`
-  (power read reflectively); the enum-heavy `ServerWorld.createExplosion`
-  hook and the position-correction suppression live in a `required:false`
-  mixin config so a future rename degrades instead of breaking.
-- **Buildability without the game**: `repo-mod/Stubs/` compiles
-  hand-written, signature-verified declarations of every external API into a
-  stub `Assembly-CSharp.dll`. Three reference modes (game / nuget / stubs)
-  share one csproj.
+### 1. R.E.P.O. side
 
-## Sandbox constraints (honesty section)
+1. Install BepInEx for R.E.P.O. (r2modman/Gale or manually — see the
+   [R.E.P.O. Modding Wiki](https://repomods.com/)).
+2. Copy `MinecraftInRepo.dll` into `R.E.P.O.\BepInEx\plugins\`.
 
-- The sandbox had no .NET SDK, no JDK, and no access to nuget.org /
-  maven.fabricmc.net / the Debian repos (only GitHub, npm and PyPI were
-  reachable), so **neither half could be compiled locally**. Verification is
-  delegated to the GitHub Actions workflow in `.github/workflows/build.yml`,
-  which builds: the plugin against stubs, the plugin against the real
-  `R.E.P.O.GameLibs.Steam` assemblies, and the Fabric mod via Loom.
-- **Not verified** (needs a human with the games): runtime behavior in
-  R.E.P.O. (overlay look, damage feel, multiplayer replication), PrintWindow
-  capture of a GLFW/OpenGL window on the user's GPU/driver, and F7
-  calibration ergonomics.
-- R.E.P.O. is an online co-op game; the mod deliberately avoids touching
-  Photon internals, applies damage only with host authority, and the README
-  tells players to use it with consenting friends. No anti-cheat, DRM or
-  ownership checks are bypassed; no game files or decompiled code are
-  committed.
+### 2. Minecraft side
 
-## Result
+1. Create a Fabric installation for **Minecraft 1.21.1** in the official
+   launcher (or use any Fabric-capable launcher).
+2. Drop `mcrepo-1.1.0.jar` into that installation's `mods` folder.
+   No other mods are required (fabric-api is *not* needed).
+3. Launch it. The log line `Bridge listening on 127.0.0.1:47621` means it's
+   ready. Create/load any **singleplayer** world — a superflat world makes a
+   great "voxel twin" stage for your R.E.P.O. levels. Cheats are not required.
 
-- `repo-mod/` — complete BepInEx plugin (~1,600 lines C#) + stub assemblies.
-- `mc-mod/` — complete Fabric mod (~700 lines Java) with gradle wrapper.
-- `launcher/` — PowerShell/bat launcher + `paths.json` template.
-- `docs/ARCHITECTURE.md`, `README.md`, CI workflow.
-- Status: **in-progress** — code complete, pending CI compile results and
-  in-game verification by a human with both games installed.
+### 3. Play
 
-## CI iteration notes (same session)
+1. Start R.E.P.O. (modded). Once Minecraft is running, the status line in the
+   bottom-left corner says `[Minecraft] linked` and the overlay appears.
+2. In a level, stand where you want the two worlds to line up, look in a
+   meaningful direction, and press **F7** once. This stores the alignment in
+   `BepInEx\config\MinecraftInRepo.cfg`.
+3. Light some TNT in Minecraft. Watch R.E.P.O. pay for it.
 
-- Round 1 (stubs only were not enough): compiling against the real
-  R.E.P.O.GameLibs.Steam assemblies caught `GUIStyleState.color` → the real
-  property is `textColor`; also a `yield return` inside try/catch in the
-  connect coroutine. Both fixed.
-- Round 2: fabric-loom 1.9-SNAPSHOT no longer exists on maven.fabricmc.net.
-  CI now resolves the newest loom snapshot from maven metadata at run time.
-- Round 3: loom 1.18-SNAPSHOT requires JVM 25; CI runs Gradle on JDK 25
-  (mod bytecode still targets Java 21 via options.release).
-- Round 4: loom 1.18 split the plugin into `net.fabricmc.fabric-loom`
-  (non-obfuscated MC 26+) and `net.fabricmc.fabric-loom-remap` (obfuscated
-  versions like 1.21.1, paired with `mappings loom.officialMojangMappings()`
-  and `modImplementation "net.fabricmc:fabric-loader:..."`). All Java sources
-  use Mojang official names (`Minecraft`, `LocalPlayer`, `PrimedTnt` in
-  `net.minecraft.world.entity.item`, `Level.explode`, `GameRenderer.render(DeltaTracker, boolean)`,
-  `ClientPacketListener.handleMovePlayer`, `setYRot`/`setXRot`/`noPhysics`/`xOld`,
-  `abilities.mayfly`, `options.hideGui`/`setCameraType`/`fov().set(...)`,
-  `getSingleplayerServer()`, `getCommands().performPrefixedCommand`).
-- Round 5: all three CI jobs (`repo-mod-stubs`, `repo-mod-gamelibs`, `mc-mod`)
-  compiled cleanly and produced artifacts (`MinecraftInRepo.dll` and
-  `mcrepo-1.0.0.jar`).
+If the overlay shows the Minecraft menu instead of the world, hit Play on your
+Fabric profile — the capture follows whatever window is titled "Minecraft*".
 
-## Solo mode follow-up (user: "I only play singleplayer, co-op will be buggy")
+## Hotkeys
 
-Requirements that came out of it: the mod must be *right* for one person
-playing alone, and it must not half-work (or grief) in an online session.
+| Key | Action |
+|---|---|
+| F6 | Toggle camera follow (Minecraft camera follows R.E.P.O.) |
+| F7 | Calibrate: align the two worlds at your current position/look direction |
+| F8 | Cycle overlay: FullScreen ghost → PiP → Off |
+| F9 | Toggle explosion damage in R.E.P.O. |
 
-### R.E.P.O. plugin
+## Configuration
 
-- New `PlayModeGate` component polls `SemiFunc.IsMultiplayer()` once per second
-  (wrapped in try/catch: in the menu / during loading the API can throw, and
-  "unknown" keeps the previous state instead of flapping between modes).
-- New `General.SinglePlayerOnly` config entry, default `true`. While blocked:
-  `CameraSync` stops streaming poses, `MinecraftCapture` skips capture,
-  `MinecraftOverlay` draws no feed, and `ExplosionRouter` drops blasts before
-  touching any game object. The status line reports
-  `solo-only: multiplayer session detected - mod idle`.
-- Set it to `false` and host a lobby if you really want co-op; that path is
-  unchanged (host-authoritative damage), just no longer the default.
+### R.E.P.O. — `BepInEx/config/MinecraftInRepo.cfg`
 
-### Minecraft mod (Fabric 1.21.1)
+| Section.Key | Default | Meaning |
+|---|---|---|
+| General.SinglePlayerOnly | true | Idle completely in multiplayer sessions (solo is the supported mode) |
+| Net.Port | 47621 | Bridge TCP port (must match the Minecraft mod) |
+| Net.SendRateHz | 60 | Camera pose update rate |
+| Overlay.Mode | FullScreen | Off / FullScreen / PiP (F8) |
+| Overlay.Alpha | 0.35 | Ghost overlay opacity |
+| Overlay.CaptureFps | 30 | Window capture rate |
+| Camera.FollowEnabled | true | Camera follow (F6) |
+| Camera.AlignmentYawDeg | 0 | World alignment yaw (set by F7) |
+| Map.McOrigin* / Map.RepoAnchor* | 0 | Mapping anchors (set by F7) |
+| Map.Scale | 1.0 | R.E.P.O. meters per Minecraft block |
+| HostGuest.Enabled | false | EXPERIMENTAL: protocol v2 link — Minecraft owns the player's body ([docs/PLAN-HOST-GUEST-RU.md](docs/PLAN-HOST-GUEST-RU.md)). Off = the classic camera-follow mod. |
+| HostGuest.Port | 25671 | TCP port of the v2 guest link ([docs/PROTOCOL-V2.md](docs/PROTOCOL-V2.md)) |
+| Blast.RadiusPerPower | 1.5 | Blast radius = power × this (TNT power = 4) |
+| Blast.MaxEnemyDamage | 90 | Point-blank enemy damage |
+| Blast.MaxPlayerDamage | 45 | Point-blank player damage |
+| Blast.ItemForce | 14 | Physics impulse on items/valuables |
+| Blast.FriendlyFire | true | Your TNT can hurt your own crew |
+| Blast.DestroyValuables | true | Strong blasts shatter items/valuables |
+| Blast.DestroyThreshold | 0.55 | Blast falloff needed to shatter |
+| Blast.StunEnemies | true | Briefly stun blasted enemies |
 
-Three problems that only show up in *singleplayer*, all fixed:
+### Minecraft — `config/mcrepo-bridge.json`
 
-1. **Vanilla pauses the world when the window loses focus** — and in solo play
-   R.E.P.O. holds the focus, so TNT would freeze mid-fuse. While the bridge
-   drives the camera the mod sets `pauseOnLostFocus = false` (the programmatic
-   version of `F3 + P` / `pauseOnLostFocus:false` in `options.txt`) and restores
-   the previous value when R.E.P.O. disconnects. Looked up reflectively on
-   `Options` (falling back to `Minecraft`) and supporting both a plain
-   `boolean` field and an `OptionInstance<Boolean>`, so a future rename cannot
-   break the build.
-2. **The integrated server decides which chunks are simulated.** If it still
-   thinks the player is at spawn, TNT lit next to the R.E.P.O. camera is never
-   ticked. `driveServerPlayerInSingleplayer` now moves the *server-side* copy of
-   the player to the camera pose via `server.execute(...)` (server thread, not
-   the client thread) with no gravity, no physics and zero velocity. Bonus:
-   there is nothing left for the server to correct, so the optional
-   `IgnorePositionCorrectionMixin` matters less.
-3. **Flight without cheats.** `/gamemode creative` needs cheats enabled; instead
-   the abilities (`mayfly`, `flying`, `invulnerable`) are set directly on the
-   `ServerPlayer` and pushed with `onUpdateAbilities()`, which works on any
-   singleplayer world. Original values are restored when the bridge goes idle.
+`enabled`, `port`, `bind`, `applyCamera`, `broadcastExplosions`, `syncFov`,
+`hideHud`, `requestCreativeMode`, `keepRunningWhenUnfocused`,
+`driveServerPlayerInSingleplayer`. Defaults are sensible; `port` must match
+`Net.Port` above.
 
-`BridgeConfig` gained `configVersion = 2` plus an `upgrade()` path, because
-Gson fills missing booleans with `false` — an old config file would otherwise
-silently disable the two new solo features.
+The last two are the solo-play tweaks: `keepRunningWhenUnfocused` disables
+vanilla's "pause my singleplayer world when the window loses focus" while the
+bridge drives the camera (R.E.P.O. holds the focus), and
+`driveServerPlayerInSingleplayer` moves the integrated server's copy of the
+player to the R.E.P.O. camera so chunk simulation — and therefore your TNT —
+follows the shared view.
 
-### Build ergonomics
+## Multiplayer notes
 
-- `scripts/build-repo-mod.{ps1,sh}` and `scripts/build-mc-mod.{ps1,sh}` build
-  (and optionally install) each side, with checks for `dotnet` / `java` and a
-  warning when the JDK is too old for Loom 1.18.
-- `scripts/fetch-builds.{ps1,sh}` pull the artifacts of the latest successful
-  GitHub Actions run via `gh` — the recommended path for anyone who does not
-  want to install a JDK and decompile Minecraft locally.
-- Version bumped to 1.1.0 on both sides; README gained a solo-play section and
-  the new config rows, and a full Russian guide was added (`README-RU.md`).
+**Default behaviour: the mod does nothing in multiplayer.** `General.SinglePlayerOnly`
+is `true`, so while R.E.P.O. reports an online session the plugin stops camera
+streaming, window capture / overlay and explosion routing entirely (the status
+line says `solo-only: multiplayer session detected - mod idle`). Nothing is
+synced, nothing can desync somebody else's game.
 
-CI run `37322987915`: all three jobs green, artifacts
-`MinecraftInRepo-gamelibs-build` (20,049 B), `MinecraftInRepo-stubs-build`
-(19,882 B), `mcrepo-fabric-mod` (22,826 B).
+If you deliberately want it in co-op, set `General.SinglePlayerOnly = false`
+and **run it as the host**: R.E.P.O. syncs health from the master client, so
+enemy/player/item damage is applied host-authoritatively (the same pattern the
+game's own damage uses). Non-host clients get the overlay, camera follow, blast
+flash and local knockback, but no shared damage. Expect rough edges — solo is
+the supported mode.
 
-## Tutorial (user request: "write a tutorial on how to launch everything and start playing")
+## Troubleshooting
 
-- `TUTORIAL-RU.md`: start-to-finish Russian walkthrough — prerequisites, window
-  setup for two games at once, launch order (Minecraft first, it hosts the
-  bridge socket), F8 overlay choice, how and why to calibrate with F7, three
-  ways to prepare TNT (fuse / redstone delay / creative), the first blast, how
-  to quit cleanly, a per-session checklist and a symptom-fix table.
-- Linked from `README-RU.md` (top) and `README.md`.
+- **"not connected"** — Minecraft isn't running, isn't on 1.21.1 Fabric with
+  the mod, or `port` mismatches. Check Minecraft's `latest.log` for
+  `Bridge listening on 127.0.0.1:47621`.
+- **Overlay is black** — some GPU/window-manager combinations refuse
+  off-screen GDI capture of OpenGL windows. Keep the Minecraft window visible
+  (e.g. second monitor, or snapped beside R.E.P.O. in windowed mode); the
+  BitBlt fallback captures anything visible.
+- **Minecraft view drifts/rubber-bands** — the optional
+  `IgnorePositionCorrectionMixin` didn't apply (check `latest.log` for mixin
+  warnings). Re-calibrate with F7; on a new game version the mixin targets may
+  need updating (see `docs/ARCHITECTURE.md`).
+- **Worlds rotated oddly after F7** — calibrate while looking along a clear
+  horizontal direction (not straight up/down), then re-check.
+- **No damage in multiplayer** — `General.SinglePlayerOnly` is `true` (default),
+  or you're not the host (see "Multiplayer notes" above).
+- **Minecraft freezes while I play R.E.P.O.** — vanilla pauses a singleplayer
+  world when the Minecraft window loses focus. Keep
+  `keepRunningWhenUnfocused = true`, or press `F3 + P` / set
+  `pauseOnLostFocus:false` in `options.txt`.
+- **TNT just sits there and never explodes** — TNT only ticks inside simulated
+  chunks. Keep `driveServerPlayerInSingleplayer = true` (default) so simulation
+  follows the camera, and/or raise "Simulation Distance" in Minecraft's video
+  settings.
+
+## Building from source
+
+You need two toolchains — or none at all:
+
+| Side | Toolchain |
+|---|---|
+| R.E.P.O. plugin | [.NET SDK 8+](https://dotnet.microsoft.com/download) (`dotnet` in PATH) |
+| Minecraft mod | **JDK 25+** — *not* 21: Fabric Loom 1.18 refuses to run Gradle on Java 21 (`Dependency requires at least JVM runtime version 25`). The mod itself still compiles to Java 21 bytecode. Install: `winget install -e --id EclipseAdoptium.Temurin.25.JDK` or https://adoptium.net/temurin/releases/?version=25 |
+| neither | Download the prebuilt files from GitHub Actions instead (see below) |
+
+### Fastest: grab the CI artifacts
+
+Every push builds both mods. With the [GitHub CLI](https://cli.github.com/):
+
+```sh
+./scripts/fetch-builds.sh                     # -> ./dist  (Windows: .\scripts\fetch-builds.ps1)
+./scripts/fetch-builds.ps1 -RepoGameDir "C:\...\REPO" -MinecraftDir "$env:APPDATA\.minecraft" -Install
+```
+
+Or from the web: **Actions → build → latest successful run → Artifacts**
+(`MinecraftInRepo-gamelibs-build` for the R.E.P.O. DLL built against the real
+game assemblies, `mcrepo-fabric-mod` for the Minecraft jar).
+
+### One-liner scripts
+
+```powershell
+# Windows
+.\scripts\build-repo-mod.ps1 -RepoGameDir "C:\...\REPO" -Install
+.\scripts\build-mc-mod.ps1  -MinecraftDir "$env:APPDATA\.minecraft" -Install
+```
+
+```sh
+# Linux / macOS
+./scripts/build-repo-mod.sh "/path/to/REPO" --install
+./scripts/build-mc-mod.sh --minecraft-dir ~/.minecraft --install
+```
+
+### MinecraftInRepo.dll (R.E.P.O. plugin, C#)
+
+```sh
+# Offline / no game: build hand-written reference stubs, then the plugin
+dotnet build repo-mod/Stubs/StubAssemblies.csproj -c Release
+dotnet build repo-mod/MinecraftInRepo.csproj -c Release
+
+# Against your real install (recommended for release builds):
+dotnet build repo-mod/MinecraftInRepo.csproj -c Release -p:RepoGameDir="C:\...\REPO"
+
+# Against the community game-assemblies NuGet (what CI does):
+dotnet build repo-mod/MinecraftInRepo.csproj -c Release -p:UseGameLibsNuGet=true
+```
+
+The DLL lands in `repo-mod/bin/Release/`.
+
+### mcrepo jar (Minecraft, Java)
+
+```sh
+cd mc-mod
+./gradlew build      # gradle wrapper; needs JDK 25+ to RUN gradle
+# jar at build/libs/mcrepo-1.1.0.jar
+```
+
+The first run downloads Minecraft 1.21.1 plus Mojang's mappings and
+decompiles the game — it takes a while and needs a few GB of disk.
+
+**If Gradle says `Dependency requires at least JVM runtime version 25. This
+build uses a Java 21 JVM`** — install a JDK 25 and point Gradle at it:
+
+```powershell
+winget install -e --id EclipseAdoptium.Temurin.25.JDK      # once
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot"   # check the exact folder
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+java -version      # must print 25 or newer
+cd mc-mod; .\gradlew build
+```
+
+`scripts/build-mc-mod.ps1` does all of that for you: it picks a JDK 25+ from
+`JAVA_HOME`, PATH or the usual install folders, and offers to install Temurin 25
+via winget if none is present. You can also pin it permanently with
+`org.gradle.java.home=C:\\Program Files\\Eclipse Adoptium\\jdk-25...` in
+`%USERPROFILE%\.gradle\gradle.properties`.
+
+CI (GitHub Actions) builds all three configurations on every push and uploads
+the artifacts — handy if you don't have the toolchains locally.
+
+## Repository layout
+
+```
+repo-mod/     BepInEx plugin (C#): bridge client, camera sync, coordinate map,
+              window capture, overlay, explosion router + API stubs for CI
+mc-mod/       Fabric mod (Java, MC 1.21.1): bridge server, camera follower,
+              explosion broadcaster (TNT + optional generic explosions)
+launcher/     One-click launcher scripts + paths.json
+scripts/      Build + artifact-fetch helpers for both mods
+docs/         ARCHITECTURE.md (protocol, math, damage pipeline, API sources)
+MODLOG.md     Development journal
+```
+
+## Credits & prior art
+
+- R.E.P.O. by semiwork; Minecraft by Mojang/Microsoft — mod your own copies.
+- API signatures verified against public mod sources:
+  [repo-live-control](https://github.com/jkieley/repo-live-control),
+  [ValuableParry](https://github.com/layfhaker/parry-mod),
+  [R.E.P.O Mod Library](https://github.com/Lillious-Networks/R.E.P.O-Mod-Library),
+  [REPOLib](https://github.com/ZehsTeam/REPOLib), and the
+  [R.E.P.O. Modding Wiki](https://repomods.com/).
+- Window-overlay technique inspired by classic "desktop capture into Unity"
+  projects.
+
+MIT licensed (see LICENSE / mc-mod/LICENSE).
+
+## Session of 2026-10-05 (2): the host/guest redesign, phase 1
+
+The user confirmed the observer build works ("работает") but said it is **not
+what he wanted**: he wants the PeakCraft architecture — the player *is* the
+Minecraft character inside R.E.P.O., walking with Minecraft physics, keeping
+Minecraft's HUD/hotbar/inventory, and interacting two-way with R.E.P.O. objects
+(valuables land in the R.E.P.O. inventory *and* show up as Minecraft items, R.E.P.O.
+menus open from the Minecraft body). Solo only, as before.
+
+### Study
+
+Cloned `aeironnsarmiento/PeakCraft` and read its `CONCEPTS.md` and
+`docs/PORTING-GUIDE.md` (the game-agnostic host-plugin guide behind SkyCraft and
+PeakCraft). Vocabulary adopted wholesale: *guest* (Minecraft: body, physics,
+inventory, HUD, blocks), *host* (R.E.P.O.: world, picture, window, keyboard),
+*link*, *ownership*, *follower*, *mirror world*. The guide's nine jobs and its
+ownership table became the phases in `docs/PLAN-HOST-GUEST-RU.md`.
+
+Deliberate differences from PeakCraft, to keep this buildable by one person:
+shared memory → the existing loopback TCP bridge; RGBA overlay frames → window
+capture; triangle collision → a half-block voxel grid the guest turns into
+invisible barrier blocks; Minecraft 26.x + FFM → stay on 1.21.1 (Java 21).
+
+### Phase 0: recon tooling
+
+`tools/ApiDump/` — a ~250-line dumper built on `System.Reflection.Metadata` (no
+NuGet restore, so it works on a machine with restricted network) that writes a
+markdown "notes file" of one managed assembly: type names, base type, field,
+property and method names with arities. `scripts/dump-repo-api.ps1` runs it
+against `REPO_Data/Managed/Assembly-CSharp.dll` and writes `docs/REPO-NOTES.md`.
+The porting guide is explicit that decompiling and writing a notes file comes
+before any patch, and the patch points for input, movement, camera, hazard and
+death cannot be chosen without it. The user will run it when he is at the PC
+with the game; the input/camera/hazard phases are blocked until then.
+
+### Phase 1: link v2 and ownership (this commit)
+
+- `docs/PROTOCOL-V2.md` — the full message set: `hs`/`gs` (host and guest state),
+  `key`/`mbtn`/`look`/`scroll`/`char`/`cursor`/`release` (input, GLFW codes),
+  `vox`/`voxclear` (8×8×8-block regions on a half-block grid, 512 bytes base64,
+  with a collision epoch), `hurt`, `cmd`, `ev`, and the unchanged v1 `boom`.
+- `repo-mod/src/Host/Ownership.cs` — the five states (HostOwns, Handoff,
+  GuestOwns, HostMenu, Cutscene), decided once per frame from six inputs, with
+  the derived questions modules are allowed to ask (`BodyFollows`,
+  `HostCameraActive`, `ReleaseGuestKeys`, …). Link loss is just HostOwns, which
+  is what makes a crashed guest safe.
+- `repo-mod/src/Host/{GuestState,HostState,VoxelRegion,GuestLink}.cs` — the
+  messages, the region bit packing, and the link itself (reader thread, polled
+  connect, 3 s guest timeout, no coroutines anywhere: R.E.P.O. does not deliver
+  MonoBehaviour messages to plugin components, see the previous entry).
+- `tools/fake_guest.py` — a guest that speaks the protocol without Minecraft:
+  walks a circle, answers teleports, takes damage, and can be killed or
+  disconnected from the keyboard. This is the guide's "fake guest", and it is
+  what makes the link and link-loss testable in minutes.
+- `tests/HostTests/` — 22 xunit tests over those files. They link the sources
+  straight out of `repo-mod/src`, so they run in CI with no game, no game
+  assemblies and no stubs: ownership priorities and transitions, message
+  parsing, tick interpolation, region bit packing, base64 round trips.
+- Wiring in `Plugin.cs` is behind `[HostGuest] Enabled = false`, so the shipped
+  observer behaviour is untouched. With it on, the plugin keeps the link,
+  publishes `hs` every frame and logs `hg: owner=… link=… ack=…` once a second.
+
+### CI
+
+Five jobs now: `host-tests` (new, runs the unit tests), the two R.E.P.O. plugin
+builds, the Fabric build and the ApiDump build. Getting the logs out of a failed
+job turned out to be impossible from the sandbox (`gh run view --log` and the
+logs blob both fail with EOF), so the test step now tees its output and re-emits
+the interesting lines as `::error::` annotations, which *are* readable through
+`GET /repos/…/check-runs/{id}/annotations`. That is how the one real bug of this
+session was found: `HostState.ToJson()` emitted `"t"` twice (message type and
+timestamp), so the guest could not tell the message type. The timestamp is now
+`"ms"`, matching the guest.
+
+Green run `37359867961`: all five jobs green (`host-tests` reports 22 passed).
