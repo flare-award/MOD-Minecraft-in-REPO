@@ -183,7 +183,7 @@ You need two toolchains — or none at all:
 | Side | Toolchain |
 |---|---|
 | R.E.P.O. plugin | [.NET SDK 8+](https://dotnet.microsoft.com/download) (`dotnet` in PATH) |
-| Minecraft mod | **JDK 21+** ([25 recommended](https://adoptium.net/temurin/releases/?version=25)) — Fabric Loom 1.18 needs JVM 25 to run Gradle; the mod itself compiles to Java 21 bytecode |
+| Minecraft mod | **JDK 25+** — *not* 21: Fabric Loom 1.18 refuses to run Gradle on Java 21 (`Dependency requires at least JVM runtime version 25`). The mod itself still compiles to Java 21 bytecode. Install: `winget install -e --id EclipseAdoptium.Temurin.25.JDK` or https://adoptium.net/temurin/releases/?version=25 |
 | neither | Download the prebuilt files from GitHub Actions instead (see below) |
 
 ### Fastest: grab the CI artifacts
@@ -233,14 +233,29 @@ The DLL lands in `repo-mod/bin/Release/`.
 
 ```sh
 cd mc-mod
-./gradlew build      # gradle wrapper; JDK 21+ (25 recommended for Loom 1.18)
+./gradlew build      # gradle wrapper; needs JDK 25+ to RUN gradle
 # jar at build/libs/mcrepo-1.1.0.jar
 ```
 
 The first run downloads Minecraft 1.21.1 plus Mojang's mappings and
-decompiles the game — it takes a while and needs a few GB of disk. If Gradle
-complains about the Java version, point `JAVA_HOME` at a JDK 25
-(pass `-JavaHome` to the PowerShell script).
+decompiles the game — it takes a while and needs a few GB of disk.
+
+**If Gradle says `Dependency requires at least JVM runtime version 25. This
+build uses a Java 21 JVM`** — install a JDK 25 and point Gradle at it:
+
+```powershell
+winget install -e --id EclipseAdoptium.Temurin.25.JDK      # once
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot"   # check the exact folder
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+java -version      # must print 25 or newer
+cd mc-mod; .\gradlew build
+```
+
+`scripts/build-mc-mod.ps1` does all of that for you: it picks a JDK 25+ from
+`JAVA_HOME`, PATH or the usual install folders, and offers to install Temurin 25
+via winget if none is present. You can also pin it permanently with
+`org.gradle.java.home=C:\\Program Files\\Eclipse Adoptium\\jdk-25...` in
+`%USERPROFILE%\.gradle\gradle.properties`.
 
 CI (GitHub Actions) builds all three configurations on every push and uploads
 the artifacts — handy if you don't have the toolchains locally.

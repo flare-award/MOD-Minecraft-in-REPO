@@ -124,7 +124,7 @@ notes»), но баги в сети возможны: именно поэтом�
 | Мод | Что нужно |
 |---|---|
 | R.E.P.O. (`MinecraftInRepo.dll`) | **.NET SDK 8+** — https://dotnet.microsoft.com/download (`dotnet` в PATH) |
-| Minecraft (`mcrepo-1.1.0.jar`) | **JDK 21+**, лучше **JDK 25** (Fabric Loom 1.18 требует JVM 25 для запуска Gradle; сам мод компилируется в байткод Java 21) — https://adoptium.net/temurin/releases/?version=25 |
+| Minecraft (`mcrepo-1.1.0.jar`) | **JDK 25+** (не 21! Fabric Loom 1.18 отказывается запускать Gradle на Java 21; сам мод компилируется в байткод Java 21) — https://adoptium.net/temurin/releases/?version=25 |
 | оба | Интернет (NuGet / Maven Fabric) и ~2 ГБ места под декомпиляцию Minecraft |
 
 #### R.E.P.O. — `MinecraftInRepo.dll`
@@ -185,6 +185,34 @@ cd mc-mod
 Результат: `mc-mod/build/libs/mcrepo-1.1.0.jar` → скопировать в папку `mods`
 вашей Fabric-установки 1.21.1.
 
+#### Ошибка `Dependency requires at least JVM runtime version 25. This build uses a Java 21 JVM`
+
+Это самый частый случай: Loom 1.18 не запускается на Java 21. Лечится установкой
+JDK 25 (Java 21 при этом можно оставить — они не конфликтуют):
+
+```powershell
+winget install -e --id EclipseAdoptium.Temurin.25.JDK      # один раз
+# дальше в том же окне PowerShell:
+$jh = Get-ChildItem "C:\Program Files\Eclipse Adoptium" -Directory -Filter "jdk-25*" | Select-Object -First 1
+$env:JAVA_HOME = $jh.FullName
+$env:PATH = "$($jh.FullName)\bin;$env:PATH"
+java -version        # должно показать 25 или новее
+cd mc-mod
+.\gradlew build
+```
+
+Или одним махом — скрипт сам найдёт JDK 25 (в `JAVA_HOME`, в PATH, в типичных
+папках установки), а если не найдёт — предложит поставить Temurin 25 через
+winget:
+
+```powershell
+..\scripts\build-mc-mod.ps1 -MinecraftDir "$env:APPDATA\.minecraft" -Install
+```
+
+Чтобы не прописывать `JAVA_HOME` каждый раз, добавьте строку
+`org.gradle.java.home=C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot`
+в `C:\Users\<вас>\.gradle\gradle.properties`.
+
 ---
 
 ## 4. Если что-то не работает (одиночная игра)
@@ -198,6 +226,7 @@ cd mc-mod
 | Вид Minecraft дёргается / откатывается | Не применился необязательный миксин `IgnorePositionCorrectionMixin` (смотрите предупреждения миксинов в `latest.log`). Перекалибруйтесь по F7. |
 | Миры совмещены криво | Калибруйтесь (F7), глядя вдоль ясного горизонтального направления, а не вверх/вниз. |
 | Нет урона по врагам | Нажмите F9 (урон мог быть выключен) и проверьте, что уровень уже сгенерирован (в меню/загрузке взрывы игнорируются). |
+| `Dependency requires at least JVM runtime version 25` при сборке | Нужен JDK 25 (не 21) для запуска Gradle — см. раздел 3, «Ошибка ...version 25». |
 | Мод «молчит» в кооперативе | Это и задумано: `SinglePlayerOnly = true`. Для работы в сети поставьте `false` и будьте хостом. |
 
 ---
