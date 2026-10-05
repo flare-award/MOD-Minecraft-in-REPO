@@ -1,6 +1,8 @@
 # Minecraft in R.E.P.O.
 
-*[Русская версия инструкции / Russian guide: README-RU.md](README-RU.md)*
+*[Русская версия: справочник [README-RU.md](README-RU.md) и пошаговый туториал
+[TUTORIAL-RU.md](TUTORIAL-RU.md) — Russian guide and start-to-finish
+walkthrough, from installation to the first TNT blast]*
 
 **Put real Minecraft inside R.E.P.O.** Minecraft's camera follows the R.E.P.O.
 camera, the live Minecraft window is rendered inside the game, and TNT you

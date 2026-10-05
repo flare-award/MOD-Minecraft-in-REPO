@@ -191,3 +191,12 @@ silently disable the two new solo features.
 CI run `37322987915`: all three jobs green, artifacts
 `MinecraftInRepo-gamelibs-build` (20,049 B), `MinecraftInRepo-stubs-build`
 (19,882 B), `mcrepo-fabric-mod` (22,826 B).
+
+## Tutorial (user request: "write a tutorial on how to launch everything and start playing")
+
+- `TUTORIAL-RU.md`: start-to-finish Russian walkthrough — prerequisites, window
+  setup for two games at once, launch order (Minecraft first, it hosts the
+  bridge socket), F8 overlay choice, how and why to calibrate with F7, three
+  ways to prepare TNT (fuse / redstone delay / creative), the first blast, how
+  to quit cleanly, a per-session checklist and a symptom-fix table.
+- Linked from `README-RU.md` (top) and `README.md`.
