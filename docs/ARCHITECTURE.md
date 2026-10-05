@@ -96,6 +96,30 @@ On `boom(x, y, z, power)` (main thread):
    destruction stays network-correct.
 6. Overlay flash + log line with hit counts.
 
+## Solo mode (default) and multiplayer gating
+
+Singleplayer is the supported mode on both sides.
+
+**R.E.P.O. (`PlayModeGate`)** polls `SemiFunc.IsMultiplayer()` once per second.
+`General.SinglePlayerOnly` (default `true`) turns a detected multiplayer session
+into a full stand-down: `CameraSync.Update`, `MinecraftCapture`'s loop,
+`MinecraftOverlay.OnGUI` and `ExplosionRouter.ApplyBlast` all early-return while
+blocked, so no game object is read or written. "Unknown" (menu, loading, API
+threw) keeps the previous decision instead of flapping. The bridge socket stays
+open but idle so reconnecting to a solo run needs no restart.
+
+**Minecraft** applies three singleplayer-only tweaks, all reverted when the
+bridge stops driving the camera (`CameraSync.revertSessionTweaks`):
+
+| Tweak | Why | How |
+|---|---|---|
+| `keepRunningWhenUnfocused` | R.E.P.O. owns the window focus; vanilla pauses a singleplayer world 0.5 s after Minecraft loses it, freezing TNT fuses | `pauseOnLostFocus = false`, found reflectively on `Options` (`boolean` or `OptionInstance<Boolean>`) |
+| `driveServerPlayerInSingleplayer` | the integrated server decides which chunks tick; TNT far from the server's idea of the player never explodes | `server.execute(...)` moves the `ServerPlayer` copy to the camera pose with no gravity / no physics / zero velocity |
+| `requestCreativeMode` | `/gamemode creative` needs cheats, and a survival player cannot fly, so the camera would be pulled back to the ground | abilities `mayfly` / `flying` / `invulnerable` set on the `ServerPlayer` + `onUpdateAbilities()` |
+
+None of these run against a remote server (`getSingleplayerServer() == null` is
+the guard), so joining a multiplayer server leaves its authority untouched.
+
 ## Threading
 
 - **R.E.P.O.**: one reader thread per connection; it only enqueues callbacks

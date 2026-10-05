@@ -130,3 +130,64 @@ Rejected alternatives:
 - Round 5: all three CI jobs (`repo-mod-stubs`, `repo-mod-gamelibs`, `mc-mod`)
   compiled cleanly and produced artifacts (`MinecraftInRepo.dll` and
   `mcrepo-1.0.0.jar`).
+
+## Solo mode follow-up (user: "I only play singleplayer, co-op will be buggy")
+
+Requirements that came out of it: the mod must be *right* for one person
+playing alone, and it must not half-work (or grief) in an online session.
+
+### R.E.P.O. plugin
+
+- New `PlayModeGate` component polls `SemiFunc.IsMultiplayer()` once per second
+  (wrapped in try/catch: in the menu / during loading the API can throw, and
+  "unknown" keeps the previous state instead of flapping between modes).
+- New `General.SinglePlayerOnly` config entry, default `true`. While blocked:
+  `CameraSync` stops streaming poses, `MinecraftCapture` skips capture,
+  `MinecraftOverlay` draws no feed, and `ExplosionRouter` drops blasts before
+  touching any game object. The status line reports
+  `solo-only: multiplayer session detected - mod idle`.
+- Set it to `false` and host a lobby if you really want co-op; that path is
+  unchanged (host-authoritative damage), just no longer the default.
+
+### Minecraft mod (Fabric 1.21.1)
+
+Three problems that only show up in *singleplayer*, all fixed:
+
+1. **Vanilla pauses the world when the window loses focus** — and in solo play
+   R.E.P.O. holds the focus, so TNT would freeze mid-fuse. While the bridge
+   drives the camera the mod sets `pauseOnLostFocus = false` (the programmatic
+   version of `F3 + P` / `pauseOnLostFocus:false` in `options.txt`) and restores
+   the previous value when R.E.P.O. disconnects. Looked up reflectively on
+   `Options` (falling back to `Minecraft`) and supporting both a plain
+   `boolean` field and an `OptionInstance<Boolean>`, so a future rename cannot
+   break the build.
+2. **The integrated server decides which chunks are simulated.** If it still
+   thinks the player is at spawn, TNT lit next to the R.E.P.O. camera is never
+   ticked. `driveServerPlayerInSingleplayer` now moves the *server-side* copy of
+   the player to the camera pose via `server.execute(...)` (server thread, not
+   the client thread) with no gravity, no physics and zero velocity. Bonus:
+   there is nothing left for the server to correct, so the optional
+   `IgnorePositionCorrectionMixin` matters less.
+3. **Flight without cheats.** `/gamemode creative` needs cheats enabled; instead
+   the abilities (`mayfly`, `flying`, `invulnerable`) are set directly on the
+   `ServerPlayer` and pushed with `onUpdateAbilities()`, which works on any
+   singleplayer world. Original values are restored when the bridge goes idle.
+
+`BridgeConfig` gained `configVersion = 2` plus an `upgrade()` path, because
+Gson fills missing booleans with `false` — an old config file would otherwise
+silently disable the two new solo features.
+
+### Build ergonomics
+
+- `scripts/build-repo-mod.{ps1,sh}` and `scripts/build-mc-mod.{ps1,sh}` build
+  (and optionally install) each side, with checks for `dotnet` / `java` and a
+  warning when the JDK is too old for Loom 1.18.
+- `scripts/fetch-builds.{ps1,sh}` pull the artifacts of the latest successful
+  GitHub Actions run via `gh` — the recommended path for anyone who does not
+  want to install a JDK and decompile Minecraft locally.
+- Version bumped to 1.1.0 on both sides; README gained a solo-play section and
+  the new config rows, and a full Russian guide was added (`README-RU.md`).
+
+CI run `37322987915`: all three jobs green, artifacts
+`MinecraftInRepo-gamelibs-build` (20,049 B), `MinecraftInRepo-stubs-build`
+(19,882 B), `mcrepo-fabric-mod` (22,826 B).

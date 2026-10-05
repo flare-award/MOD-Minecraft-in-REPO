@@ -1,5 +1,7 @@
 # Minecraft in R.E.P.O.
 
+*[Русская версия инструкции / Russian guide: README-RU.md](README-RU.md)*
+
 **Put real Minecraft inside R.E.P.O.** Minecraft's camera follows the R.E.P.O.
 camera, the live Minecraft window is rendered inside the game, and TNT you
 detonate in Minecraft blows up R.E.P.O.'s enemies, items, valuables — and your
@@ -12,7 +14,7 @@ Two games, one shared world:
 |        R.E.P.O.          |  -------------------------------  |        Minecraft         |
 |  (BepInEx plugin)        |   camera pose  (60 Hz)            |  (Fabric mod, 1.21.1)    |
 |                          |  ------------------------------>  |                          |
-|  MinecraftInRepo.dll     |   explosions   (event lines)      |  mcrepo-1.0.0.jar        |
+|  MinecraftInRepo.dll     |   explosions   (event lines)      |  mcrepo-1.1.0.jar        |
 |  - window capture        |  <------------------------------- |  - moves the player to   |
 |  - in-game overlay       |                                   |    the R.E.P.O. camera   |
 |  - blast damage          |                                   |  - reports every boom    |
@@ -35,6 +37,13 @@ Two games, one shared world:
   cameras' current poses.
 - No Harmony patches of game code, no fabric-api dependency, no asset bundles:
   everything is additive, and the bridge is loopback-only.
+- **Solo-first.** Singleplayer is the supported mode: the R.E.P.O. plugin idles
+  completely as soon as it detects a multiplayer session (`General.SinglePlayerOnly`
+  defaults to `true`), so co-op stays vanilla-clean instead of half-working.
+  Minecraft gets three solo-friendly tweaks for free: no auto-pause when its
+  window loses focus, the integrated server's player copy follows the camera
+  (so TNT far from spawn still ticks and explodes), and creative flight without
+  needing cheats.
 
 ## Requirements
 
@@ -60,11 +69,11 @@ Two games, one shared world:
 
 1. Create a Fabric installation for **Minecraft 1.21.1** in the official
    launcher (or use any Fabric-capable launcher).
-2. Drop `mcrepo-1.0.0.jar` into that installation's `mods` folder.
+2. Drop `mcrepo-1.1.0.jar` into that installation's `mods` folder.
    No other mods are required (fabric-api is *not* needed).
 3. Launch it. The log line `Bridge listening on 127.0.0.1:47621` means it's
-   ready. Create/load any world — a superflat world makes a great "voxel
-   twin" stage for your R.E.P.O. levels.
+   ready. Create/load any **singleplayer** world — a superflat world makes a
+   great "voxel twin" stage for your R.E.P.O. levels. Cheats are not required.
 
 ### 3. Play
 
@@ -93,6 +102,7 @@ Fabric profile — the capture follows whatever window is titled "Minecraft*".
 
 | Section.Key | Default | Meaning |
 |---|---|---|
+| General.SinglePlayerOnly | true | Idle completely in multiplayer sessions (solo is the supported mode) |
 | Net.Port | 47621 | Bridge TCP port (must match the Minecraft mod) |
 | Net.SendRateHz | 60 | Camera pose update rate |
 | Overlay.Mode | FullScreen | Off / FullScreen / PiP (F8) |
@@ -114,15 +124,31 @@ Fabric profile — the capture follows whatever window is titled "Minecraft*".
 ### Minecraft — `config/mcrepo-bridge.json`
 
 `enabled`, `port`, `bind`, `applyCamera`, `broadcastExplosions`, `syncFov`,
-`hideHud`, `requestCreativeMode`. Defaults are sensible; `port` must match
+`hideHud`, `requestCreativeMode`, `keepRunningWhenUnfocused`,
+`driveServerPlayerInSingleplayer`. Defaults are sensible; `port` must match
 `Net.Port` above.
+
+The last two are the solo-play tweaks: `keepRunningWhenUnfocused` disables
+vanilla's "pause my singleplayer world when the window loses focus" while the
+bridge drives the camera (R.E.P.O. holds the focus), and
+`driveServerPlayerInSingleplayer` moves the integrated server's copy of the
+player to the R.E.P.O. camera so chunk simulation — and therefore your TNT —
+follows the shared view.
 
 ## Multiplayer notes
 
-R.E.P.O. syncs health from the master client, so **run the mod as the host**
-for full effect: enemy/player/item damage is applied host-authoritatively
-(same pattern the game's own damage uses). Non-host clients get the overlay,
-camera follow, blast flash and local knockback, but no shared damage.
+**Default behaviour: the mod does nothing in multiplayer.** `General.SinglePlayerOnly`
+is `true`, so while R.E.P.O. reports an online session the plugin stops camera
+streaming, window capture / overlay and explosion routing entirely (the status
+line says `solo-only: multiplayer session detected - mod idle`). Nothing is
+synced, nothing can desync somebody else's game.
+
+If you deliberately want it in co-op, set `General.SinglePlayerOnly = false`
+and **run it as the host**: R.E.P.O. syncs health from the master client, so
+enemy/player/item damage is applied host-authoritatively (the same pattern the
+game's own damage uses). Non-host clients get the overlay, camera follow, blast
+flash and local knockback, but no shared damage. Expect rough edges — solo is
+the supported mode.
 
 ## Troubleshooting
 
@@ -139,9 +165,53 @@ camera follow, blast flash and local knockback, but no shared damage.
   need updating (see `docs/ARCHITECTURE.md`).
 - **Worlds rotated oddly after F7** — calibrate while looking along a clear
   horizontal direction (not straight up/down), then re-check.
-- **No damage in multiplayer** — you're not the host (see above).
+- **No damage in multiplayer** — `General.SinglePlayerOnly` is `true` (default),
+  or you're not the host (see "Multiplayer notes" above).
+- **Minecraft freezes while I play R.E.P.O.** — vanilla pauses a singleplayer
+  world when the Minecraft window loses focus. Keep
+  `keepRunningWhenUnfocused = true`, or press `F3 + P` / set
+  `pauseOnLostFocus:false` in `options.txt`.
+- **TNT just sits there and never explodes** — TNT only ticks inside simulated
+  chunks. Keep `driveServerPlayerInSingleplayer = true` (default) so simulation
+  follows the camera, and/or raise "Simulation Distance" in Minecraft's video
+  settings.
 
 ## Building from source
+
+You need two toolchains — or none at all:
+
+| Side | Toolchain |
+|---|---|
+| R.E.P.O. plugin | [.NET SDK 8+](https://dotnet.microsoft.com/download) (`dotnet` in PATH) |
+| Minecraft mod | **JDK 21+** ([25 recommended](https://adoptium.net/temurin/releases/?version=25)) — Fabric Loom 1.18 needs JVM 25 to run Gradle; the mod itself compiles to Java 21 bytecode |
+| neither | Download the prebuilt files from GitHub Actions instead (see below) |
+
+### Fastest: grab the CI artifacts
+
+Every push builds both mods. With the [GitHub CLI](https://cli.github.com/):
+
+```sh
+./scripts/fetch-builds.sh                     # -> ./dist  (Windows: .\scripts\fetch-builds.ps1)
+./scripts/fetch-builds.ps1 -RepoGameDir "C:\...\REPO" -MinecraftDir "$env:APPDATA\.minecraft" -Install
+```
+
+Or from the web: **Actions → build → latest successful run → Artifacts**
+(`MinecraftInRepo-gamelibs-build` for the R.E.P.O. DLL built against the real
+game assemblies, `mcrepo-fabric-mod` for the Minecraft jar).
+
+### One-liner scripts
+
+```powershell
+# Windows
+.\scripts\build-repo-mod.ps1 -RepoGameDir "C:\...\REPO" -Install
+.\scripts\build-mc-mod.ps1  -MinecraftDir "$env:APPDATA\.minecraft" -Install
+```
+
+```sh
+# Linux / macOS
+./scripts/build-repo-mod.sh "/path/to/REPO" --install
+./scripts/build-mc-mod.sh --minecraft-dir ~/.minecraft --install
+```
 
 ### MinecraftInRepo.dll (R.E.P.O. plugin, C#)
 
@@ -163,9 +233,14 @@ The DLL lands in `repo-mod/bin/Release/`.
 
 ```sh
 cd mc-mod
-./gradlew build      # gradle wrapper; JDK 21 required
-# jar at build/libs/mcrepo-1.0.0.jar
+./gradlew build      # gradle wrapper; JDK 21+ (25 recommended for Loom 1.18)
+# jar at build/libs/mcrepo-1.1.0.jar
 ```
+
+The first run downloads Minecraft 1.21.1 plus Mojang's mappings and
+decompiles the game — it takes a while and needs a few GB of disk. If Gradle
+complains about the Java version, point `JAVA_HOME` at a JDK 25
+(pass `-JavaHome` to the PowerShell script).
 
 CI (GitHub Actions) builds all three configurations on every push and uploads
 the artifacts — handy if you don't have the toolchains locally.
@@ -178,6 +253,7 @@ repo-mod/     BepInEx plugin (C#): bridge client, camera sync, coordinate map,
 mc-mod/       Fabric mod (Java, MC 1.21.1): bridge server, camera follower,
               explosion broadcaster (TNT + optional generic explosions)
 launcher/     One-click launcher scripts + paths.json
+scripts/      Build + artifact-fetch helpers for both mods
 docs/         ARCHITECTURE.md (protocol, math, damage pipeline, API sources)
 MODLOG.md     Development journal
 ```

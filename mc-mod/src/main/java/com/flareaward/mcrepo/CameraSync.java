@@ -327,6 +327,9 @@ public final class CameraSync {
     }
 
     private void revertSessionTweaks(Minecraft client) {
+        if (!pauseOverridden && !serverTweaksApplied) {
+            return; // nothing was changed, nothing to give back
+        }
         setPauseOnLostFocus(client, savedPauseOnLostFocus == null ? true : savedPauseOnLostFocus);
         pauseOverridden = false;
         savedPauseOnLostFocus = null;
@@ -403,6 +406,7 @@ public final class CameraSync {
                 // Newer versions keep it as an OptionInstance<Boolean>.
                 Method setter = findMethod(current.getClass(), "set", Object.class);
                 if (setter != null) {
+                    pauseOverridden = true;
                     setter.setAccessible(true);
                     setter.invoke(current, Boolean.valueOf(value));
                 }
