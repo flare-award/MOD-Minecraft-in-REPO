@@ -54,6 +54,12 @@ namespace MinecraftInRepo
             return down && !was;
         }
 
+        /// <summary>True while the key is held, in either input backend.</summary>
+        public static bool GetKey(KeyCode code)
+        {
+            return IsDown(code);
+        }
+
         private static bool IsDown(KeyCode code)
         {
             if (!probed)

@@ -145,6 +145,9 @@ namespace UnityEngine
         public Vector3 eulerAngles { get; set; }
         public Transform parent { get; set; }
 
+        public Quaternion rotation { get; set; }
+
+        public void SetPositionAndRotation(Vector3 position, Quaternion rotation) { }
         public Transform Find(string n) { return null; }
         public void SetParent(Transform p) { }
         public void LookAt(Vector3 worldPosition) { }
@@ -183,6 +186,67 @@ namespace UnityEngine
     {
         public bool enabled { get; set; }
     }
+
+    public struct Quaternion
+    {
+        public static Quaternion identity => new Quaternion();
+        public static Quaternion Euler(float x, float y, float z) { return new Quaternion(); }
+        public Vector3 eulerAngles => new Vector3(0f, 0f, 0f);
+    }
+
+    public struct Ray
+    {
+        public Vector3 origin;
+        public Vector3 direction;
+        public Ray(Vector3 origin, Vector3 direction) { this.origin = origin; this.direction = direction; }
+    }
+
+    public struct RaycastHit
+    {
+        public Vector3 point { get; private set; }
+        public Vector3 normal { get; private set; }
+        public float distance { get; private set; }
+        public Collider collider { get; private set; }
+        public Transform transform { get; private set; }
+    }
+
+    public struct LayerMask
+    {
+        public int value;
+        public static implicit operator int(LayerMask mask) { return mask.value; }
+        public static implicit operator LayerMask(int intVal) { LayerMask m; m.value = intVal; return m; }
+    }
+
+    public static class Physics
+    {
+        /// <summary>Unity's global "do raycasts hit back faces" switch.</summary>
+        public static bool queriesHitBackfaces { get; set; }
+
+        public static bool Raycast(Vector3 origin, Vector3 direction, out RaycastHit hitInfo)
+        {
+            hitInfo = new RaycastHit();
+            return false;
+        }
+        public static bool Raycast(Vector3 origin, Vector3 direction, out RaycastHit hitInfo, float maxDistance)
+        {
+            hitInfo = new RaycastHit();
+            return false;
+        }
+        public static bool Raycast(Vector3 origin, Vector3 direction, out RaycastHit hitInfo, float maxDistance, int layerMask)
+        {
+            hitInfo = new RaycastHit();
+            return false;
+        }
+    }
+
+    public class Renderer : Component
+    {
+        public bool enabled { get; set; }
+    }
+
+    public class MeshRenderer : Renderer { }
+
+    public class SkinnedMeshRenderer : Renderer { }
 
     public class Screen
     {
@@ -391,6 +455,9 @@ namespace UnityEngine
     public enum KeyCode
     {
         None = 0,
+        G = 103,
+        O = 111,
+        Escape = 27,
         F1 = 282,
         F2 = 283,
         F3 = 284,

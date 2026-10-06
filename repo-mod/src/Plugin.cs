@@ -10,6 +10,7 @@
 // Hotkeys: F6 toggle camera follow, F7 calibrate world alignment,
 //          F8 cycle overlay mode, F9 toggle blast damage.
 
+using System;
 using System.Threading;
 using BepInEx;
 using BepInEx.Logging;
@@ -46,8 +47,17 @@ namespace MinecraftInRepo
         private GuestLink guestLink;
         private Ownership ownership;
         private HostState hostState;
+        private RepoApi repoApi;
+        private HostProbe probe;
+        private CollisionExport collisionExport;
+        private BodyFollower follower;
+        private CameraDriver cameraDriver;
+        private InputGate inputGate;
+        private HealthBridge healthBridge;
+        private TickTracker tickTracker;
         private long teleportSeq;
         private bool handoffRequested;
+        private bool apiReported;
         private float nextGuestSummary;
 
         /// <summary>Distance from the host camera down to the character's feet.
@@ -94,18 +104,25 @@ namespace MinecraftInRepo
 
             if (config.HostGuestMode.Value)
             {
-                guestLink = new GuestLink(message => Logger.LogInfo("[MinecraftInRepo] " + message),
-                    "127.0.0.1", config.GuestPort.Value);
+                Action<string> guestLog = message => Logger.LogInfo("[MinecraftInRepo] " + message);
+                repoApi = new RepoApi(guestLog);
+                probe = new HostProbe(repoApi, guestLog);
+                guestLink = new GuestLink(guestLog, "127.0.0.1", config.GuestPort.Value);
                 guestLink.ExplosionReceived += router.Enqueue;
                 guestLink.GuestEvent += kind =>
                     Logger.LogInfo("[MinecraftInRepo] guest event: " + kind);
                 guestLink.HelloReceived += version =>
                     Logger.LogInfo("[MinecraftInRepo] guest says hello: " + version);
-                guestLink.Start();
+                collisionExport = new CollisionExport(repoApi, guestLog, guestLink, map);
+                follower = new BodyFollower(repoApi, guestLog);
+                cameraDriver = new CameraDriver(config, map, guestLog);
+                inputGate = new InputGate(repoApi, guestLog);
+                healthBridge = new HealthBridge(repoApi, guestLink, guestLog);
                 ownership = new Ownership();
+                guestLink.Start();
                 Logger.LogInfo("[MinecraftInRepo] Host/guest link armed on port " +
                     config.GuestPort.Value + " (protocol v2, docs/PROTOCOL-V2.md). " +
-                    "Phase 1: link and ownership only - the body stays with R.E.P.O.");
+                    "G = R.E.P.O. interact, Esc = R.E.P.O. pause.");
             }
 
             Logger.LogInfo("[MinecraftInRepo] Keyboard backend: " + InputHelper.Backend);
@@ -251,41 +268,52 @@ namespace MinecraftInRepo
         }
 
         /// <summary>
-        /// Phase 1 of the host/guest redesign: keep the v2 link up, decide who owns
-        /// the player, and publish the host state. Nothing moves yet - that is
-        /// phases 2 and 3 (collision export, follower, camera, input).
+        /// The host/guest pipeline, once per frame: keep the link, decide who owns
+        /// the player, and do the work that state needs - follow with the hidden
+        /// body, write the guest's camera, gate the host's input, mirror health and
+        /// stream collision.
         /// </summary>
         private void TickGuestLink()
         {
+            int nowMs = Environment.TickCount;
             guestLink.Tick();
+            probe.Refresh();
 
             bool linkUp = guestLink.LinkUp;
             if (linkUp && !handoffRequested)
             {
                 handoffRequested = true;
                 teleportSeq++;
+                collisionExport.Reset();
+                healthBridge.Reset();
             }
             else if (!linkUp)
             {
                 handoffRequested = false;
             }
 
-            Camera camera = Camera.main;
-            bool hasCharacter = gate.Allowed && camera != null;
+            GuestState guest = guestLink.Guest;
+            tickTracker.Observe(guest, nowMs);
 
-            Vector3 feet = hasCharacter
-                ? map.RepoToMc(camera.transform.position - new Vector3(0f, HostEyeToFeet, 0f))
-                : Vector3.zero;
+            object avatar = probe.Avatar;
+            object controller = probe.Controller;
+            bool hasCharacter = probe.HasCharacter && gate.Allowed;
+
+            if (hasCharacter && !apiReported)
+            {
+                apiReported = true;
+                repoApi.ReportMissing();
+            }
 
             ownership.BeginFrame();
             Owner owner = ownership.Decide(new OwnershipInputs
             {
                 LinkUp = linkUp,
                 HasCharacter = hasCharacter,
-                Cutscene = false,          // phase 0: the cutscene list comes from docs/REPO-NOTES.md
-                HostMenuOpen = false,      // phase 5
-                TeleportPending = handoffRequested && guestLink.Guest.TeleportAck != teleportSeq,
-                GuestDead = guestLink.Guest.Dead
+                Cutscene = probe.Cutscene,
+                HostMenuOpen = probe.HostMenuOpen,
+                TeleportPending = handoffRequested && guest.TeleportAck != teleportSeq,
+                GuestDead = guest.Dead
             });
 
             if (ownership.Changed)
@@ -293,8 +321,17 @@ namespace MinecraftInRepo
                 Logger.LogInfo(string.Format(
                     "[MinecraftInRepo] owner {0} -> {1} ({2})",
                     ownership.Previous, owner, ownership.Reason));
-                if (ownership.ReleaseGuestKeys)
+
+                bool bodyFollows = ownership.BodyFollows;
+                if (bodyFollows && !follower.Following)
                 {
+                    follower.Grab(controller, probe.AvatarVisuals, avatar);
+                    tickTracker = new TickTracker();
+                }
+                else if (!bodyFollows && follower.Following)
+                {
+                    follower.Release(controller, probe.AvatarVisuals);
+                    inputGate.Clear(probe.ToolController);
                     guestLink.SendReleaseAll();
                 }
             }
@@ -305,10 +342,15 @@ namespace MinecraftInRepo
             hostState.MenuOpen = ownership.SendMenuOpenFlag;
             hostState.ViewportWidth = Screen.width;
             hostState.ViewportHeight = Screen.height;
-            hostState.X = feet.x;
-            hostState.Y = feet.y;
-            hostState.Z = feet.z;
-            if (hasCharacter)
+
+            Vector3 target = ownership.BodyFollows ? GuestFeet() : probe.CharacterPosition;
+            Vector3 targetMc = map.RepoToMc(target);
+            hostState.X = targetMc.x;
+            hostState.Y = targetMc.y;
+            hostState.Z = targetMc.z;
+
+            Camera camera = Camera.main;
+            if (camera != null)
             {
                 Vector3 forward = camera.transform.forward;
                 hostState.Yaw = CoordinateMap.UnityYaw(forward);
@@ -316,17 +358,57 @@ namespace MinecraftInRepo
             }
             guestLink.Publish(hostState);
 
+            if (ownership.BodyFollows)
+            {
+                double alpha = tickTracker.Alpha(guest, nowMs);
+                follower.Update(avatar, controller, GuestFeet(alpha));
+                cameraDriver.Update(guest, alpha);
+
+                if (owner == Owner.GuestOwns)
+                {
+                    inputGate.InteractHeld = InputHelper.GetKey(KeyCode.G);
+                    inputGate.Update(controller, probe.ToolController);
+                }
+                else
+                {
+                    inputGate.Clear(probe.ToolController);
+                }
+
+                healthBridge.Update(probe.Health, avatar, guest, nowMs);
+            }
+
+            if (owner != Owner.HostOwns)
+            {
+                collisionExport.Tick(target, nowMs);
+            }
+
             if (Time.unscaledTime >= nextGuestSummary)
             {
                 nextGuestSummary = Time.unscaledTime + 1f;
-                GuestState guest = guestLink.Guest;
                 Logger.LogInfo(string.Format(
-                    "[MinecraftInRepo] hg: owner={0} link={1} age={2}ms guest=({3:0.00},{4:0.00},{5:0.00}) " +
-                    "hp={6:0.0} ack={7}/{8} frames={9}",
-                    owner, linkUp ? "up" : "down", guestLink.GuestAgeMs,
-                    guest.X, guest.Y, guest.Z, guest.Health,
-                    guest.TeleportAck, teleportSeq, guestLink.HostSeq));
+                    "[MinecraftInRepo] hg: owner={0} ({1}) link={2} age={3}ms guest=({4:0.00},{5:0.00},{6:0.00}) " +
+                    "hp={7:0.0} ack={8}/{9} vox={10}/{11} ready={12} eyeErr={13:0.00} feet={14:0.00} state={15}",
+                    owner, ownership.Reason, linkUp ? "up" : "down", guestLink.GuestAgeMs,
+                    guest.X, guest.Y, guest.Z, guest.Health, guest.TeleportAck, teleportSeq,
+                    collisionExport == null ? 0 : collisionExport.RegionsInRange, 0,
+                    collisionExport != null && collisionExport.Ready,
+                    cameraDriver == null ? 0f : cameraDriver.LastEyeError,
+                    probe.EyeToCharacter, probe.GameState));
             }
+        }
+
+        /// <summary>The guest player's feet in R.E.P.O. space, interpolated on the host's frame clock.</summary>
+        private Vector3 GuestFeet()
+        {
+            return GuestFeet(tickTracker.Alpha(guestLink.Guest, Environment.TickCount));
+        }
+
+        private Vector3 GuestFeet(double alpha)
+        {
+            GuestState guest = guestLink.Guest;
+            double x, y, z;
+            guest.LerpPosition(alpha, out x, out y, out z);
+            return map.McToRepo(new Vector3((float)x, (float)y, (float)z));
         }
 
         /// <summary>Drawn from the plugin itself so the overlay cannot be lost

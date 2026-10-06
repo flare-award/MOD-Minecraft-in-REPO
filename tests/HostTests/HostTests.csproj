@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <Compile Include="../../repo-mod/src/Host/Ownership.cs" Link="Host/Ownership.cs" />
+    <Compile Include="../../repo-mod/src/Host/GuestPose.cs" Link="Host/GuestPose.cs" />
+    <Compile Include="../../repo-mod/src/Host/RegionScheduler.cs" Link="Host/RegionScheduler.cs" />
     <Compile Include="../../repo-mod/src/Host/GuestState.cs" Link="Host/GuestState.cs" />
     <Compile Include="../../repo-mod/src/Host/HostState.cs" Link="Host/HostState.cs" />
     <Compile Include="../../repo-mod/src/Host/VoxelRegion.cs" Link="Host/VoxelRegion.cs" />
