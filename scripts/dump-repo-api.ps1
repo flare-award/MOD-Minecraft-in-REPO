@@ -41,7 +41,7 @@ if (-not (Test-Path $assembly)) {
 
 # Without -Full we only run the patch-point grep, which stays small enough to
 # paste into a chat. -Full also dumps every type matching the keyword list.
-if (-not $Full) { $Keywords = "" }
+if (-not $Full) { $Keywords = "none" }
 
 Write-Host "Game     : $RepoGameDir" -ForegroundColor Cyan
 Write-Host "Assembly : $assembly" -ForegroundColor Cyan
@@ -60,6 +60,7 @@ try {
     throw
 }
 
+Write-Host "Args     : keywords='$Keywords' grep='$Grep' maxTypes=$MaxTypes" -ForegroundColor Cyan
 dotnet run --project $tool -c Release --no-build -- "$managed" "$Out" "Assembly-CSharp.dll" "$Keywords" "$Grep" "$MaxTypes"
 if ($LASTEXITCODE -ne 0) { throw "ApiDump failed ($LASTEXITCODE)" }
 

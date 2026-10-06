@@ -40,7 +40,15 @@ namespace ApiDump
             string managedDir = args[0];
             string outFile = args[1];
             string assemblyFile = args.Length > 2 && args[2].Length > 0 ? args[2] : "Assembly-CSharp.dll";
-            string[] keywords = (args.Length > 3 && args[3].Length > 0 ? args[3] : DefaultKeywords)
+            // "none" (or an empty argument - Windows PowerShell 5.1 drops empty
+            // arguments to native commands, so callers pass "none") means: skip
+            // the big type dump and only run the grep.
+            string rawKeywords = args.Length > 3 ? args[3] : DefaultKeywords;
+            if (rawKeywords == "none")
+            {
+                rawKeywords = "";
+            }
+            string[] keywords = rawKeywords
                 .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(k => k.Trim())
                 .Where(k => k.Length > 0)
@@ -48,14 +56,21 @@ namespace ApiDump
 
             // Grep mode: list only the members whose names match, grouped by pattern.
             // This is the file that actually answers "where do I patch input?".
-            string[] greps = (args.Length > 4 && args[4].Length > 0 ? args[4] : "")
-                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(k => k.Trim())
-                .Where(k => k.Length > 0)
-                .ToArray();
-            if (greps.Length == 0 && args.Length > 4 && args[4] == "patchpoints")
+            // "patchpoints" (or an empty argument) means: search the built-in
+            // patch-point list - the five host patch points of the porting guide.
+            string rawGrep = args.Length > 4 ? args[4] : null;
+            string[] greps;
+            if (string.IsNullOrEmpty(rawGrep) || rawGrep == "patchpoints")
             {
                 greps = DefaultGrep.Split(';');
+            }
+            else
+            {
+                greps = rawGrep
+                    .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(k => k.Trim())
+                    .Where(k => k.Length > 0)
+                    .ToArray();
             }
 
             int maxTypes = 0;
