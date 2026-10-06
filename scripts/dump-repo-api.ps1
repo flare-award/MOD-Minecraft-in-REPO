@@ -4,7 +4,8 @@ param(
     [string]$Keywords,
     [string]$Grep = "patchpoints",
     [int]$MaxTypes = 40,
-    [switch]$Full
+    [switch]$Full,
+    [switch]$NoBuild
 )
 
 $ErrorActionPreference = "Stop"
