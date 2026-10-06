@@ -108,19 +108,21 @@ class FakeGuest(object):
         next_tick = time.time()
 
         while self.running and self.connection is client:
-            # Inbound lines from the host.
+            # Inbound lines from the host. A read timeout only means "nothing
+            # to read yet" - only an empty read means the peer closed.
             try:
                 data = client.recv(65536)
             except socket.timeout:
-                data = b""
+                data = None
             except OSError:
                 break
-            if not data:
-                break
-            buffer += data
-            while b"\n" in buffer:
-                line, buffer = buffer.split(b"\n", 1)
-                self.handle(line.decode("utf-8", "replace").strip())
+            if data is not None:
+                if not data:
+                    break
+                buffer += data
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    self.handle(line.decode("utf-8", "replace").strip())
 
             # Outbound state at Minecraft's tick rate.
             now = time.time()

@@ -79,6 +79,9 @@ namespace MinecraftInRepo.Host
 
         public RegionKey Centre => centre;
 
+        /// <summary>True once SetCentre has been called at least once.</summary>
+        public bool HasCentre => centreSet;
+
         /// <summary>Recentre on the player. Returns true when the centre region changed.</summary>
         public bool SetCentre(int rx, int ry, int rz)
         {

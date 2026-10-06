@@ -38,17 +38,27 @@ namespace MinecraftInRepo.Host
                 api.SetInstanceValue(controller, "CollisionGrounded", true);
             }
 
+            // Preferred path: the game's own local-visibility switch.
             bool hid = false;
             if (avatarVisuals != null)
             {
-                hid = api.SetInstanceValue(avatarVisuals, "localVisibility", false)
-                      && api.Invoke(avatarVisuals, "ApplyLocalVisibilityBody") != null;
+                hid = api.SetInstanceValue(avatarVisuals, "localVisibility", false);
+                api.Invoke(avatarVisuals, "ApplyLocalVisibilityBody");
             }
-            if (!hid && avatar is Component)
+
+            // Fallback (and belt and braces): hide every renderer under the
+            // avatar, remembering which ones we touched so releasing restores
+            // exactly those.
+            int found = 0;
+            Component root = avatar as Component;
+            if (root == null && avatarVisuals != null)
             {
-                // Fallback: hide every renderer under the avatar, remembering which
-                // ones we touched so releasing restores exactly those.
-                Renderer[] renderers = ((Component)avatar).GetComponentsInChildren<Renderer>(true);
+                root = avatarVisuals as Component;
+            }
+            if (root != null)
+            {
+                Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+                found = renderers == null ? 0 : renderers.Length;
                 foreach (Renderer renderer in renderers)
                 {
                     if (renderer == null || !renderer.enabled)
@@ -58,10 +68,11 @@ namespace MinecraftInRepo.Host
                     renderer.enabled = false;
                     hiddenRenderers.Add(renderer);
                 }
-                hid = hiddenRenderers.Count > 0;
+                hid = hid || hiddenRenderers.Count > 0;
             }
 
-            log("[MinecraftInRepo] follower: body taken (kinematic, renderers hidden=" + hid + ").");
+            log("[MinecraftInRepo] follower: body taken (kinematic=" + (controller != null) +
+                " visibilityField=" + hid + " renderers=" + found + "/" + hiddenRenderers.Count + ").");
         }
 
         /// <summary>Give the body back with its physics, renderers and timers restored.</summary>

@@ -364,15 +364,10 @@ namespace MinecraftInRepo
                 follower.Update(avatar, controller, GuestFeet(alpha));
                 cameraDriver.Update(guest, alpha);
 
-                if (owner == Owner.GuestOwns)
-                {
-                    inputGate.InteractHeld = InputHelper.GetKey(KeyCode.G);
-                    inputGate.Update(controller, probe.ToolController);
-                }
-                else
-                {
-                    inputGate.Clear(probe.ToolController);
-                }
+                // Movement stays off in HostMenu too - the body is the guest's -
+                // but the reserved interact key belongs to the host's window.
+                inputGate.InteractHeld = InputHelper.GetKey(KeyCode.G);
+                inputGate.Update(controller, probe.ToolController, owner == Owner.GuestOwns);
 
                 healthBridge.Update(probe.Health, avatar, guest, nowMs);
             }
@@ -387,10 +382,11 @@ namespace MinecraftInRepo
                 nextGuestSummary = Time.unscaledTime + 1f;
                 Logger.LogInfo(string.Format(
                     "[MinecraftInRepo] hg: owner={0} ({1}) link={2} age={3}ms guest=({4:0.00},{5:0.00},{6:0.00}) " +
-                    "hp={7:0.0} ack={8}/{9} vox={10}/{11} ready={12} eyeErr={13:0.00} feet={14:0.00} state={15}",
+                    "hp={7:0.0} ack={8}/{9} regions={10} epoch={11} ready={12} eyeErr={13:0.00} feet={14:0.00} state={15}",
                     owner, ownership.Reason, linkUp ? "up" : "down", guestLink.GuestAgeMs,
                     guest.X, guest.Y, guest.Z, guest.Health, guest.TeleportAck, teleportSeq,
-                    collisionExport == null ? 0 : collisionExport.RegionsInRange, 0,
+                    collisionExport == null ? 0 : collisionExport.RegionsInRange,
+                    collisionExport == null ? 0 : collisionExport.Epoch,
                     collisionExport != null && collisionExport.Ready,
                     cameraDriver == null ? 0f : cameraDriver.LastEyeError,
                     probe.EyeToCharacter, probe.GameState));

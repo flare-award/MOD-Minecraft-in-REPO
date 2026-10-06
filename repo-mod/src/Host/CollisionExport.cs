@@ -28,6 +28,12 @@ namespace MinecraftInRepo.Host
 
         private const int MaxCastsPerColumn = 8;
         private const float Skin = 0.02f;          // step out of a surface before the next cast
+        /// <summary>How long a new centre region must hold before we recentre (ms).</summary>
+        public const int RecentreDelayMs = 500;
+
+        /// <summary>Distance (weighted, squared) that counts as a jump and recentres at once.</summary>
+        public const int JumpDistance = 16;
+
         private const int NearRefreshMs = 4000;
         private const int FarRefreshMs = 30000;
         private const int LayerMaskAll = ~0;
@@ -44,6 +50,10 @@ namespace MinecraftInRepo.Host
         private RegionKey pendingRegion;
         private int nextColumn;
         private int epoch = 1;
+
+        private RegionKey desiredCentre;
+        private bool desiredValid;
+        private int desiredSinceMs;
 
         public CollisionExport(RepoApi repoApi, Action<string> log, GuestLink guestLink, CoordinateMap coordinateMap)
         {
@@ -66,6 +76,7 @@ namespace MinecraftInRepo.Host
         {
             scheduler.Clear();
             pendingValid = false;
+            desiredValid = false;
             epoch++;
             if (link != null)
             {
@@ -85,16 +96,36 @@ namespace MinecraftInRepo.Host
                 return;
             }
 
+            // Recentring bumps the epoch, which makes the guest drop everything it
+            // was told, so it must not happen while the player hovers on a region
+            // boundary: wait for the new region to hold steady for a moment.
             Vector3 centreMc = map.RepoToMc(centreRepo);
-            int rx = VoxelRegion.BlockToRegion(centreMc.x);
-            int ry = VoxelRegion.BlockToRegion(centreMc.y);
-            int rz = VoxelRegion.BlockToRegion(centreMc.z);
-            if (scheduler.SetCentre(rx, ry, rz))
+            RegionKey desired = new RegionKey(
+                VoxelRegion.BlockToRegion(centreMc.x),
+                VoxelRegion.BlockToRegion(centreMc.y),
+                VoxelRegion.BlockToRegion(centreMc.z));
+
+            if (!desiredValid || !desired.Equals(desiredCentre))
             {
-                epoch++;
-                pendingValid = false;
-                link.SendVoxelClear(epoch);
-                log("[MinecraftInRepo] collision: recentred on region " + scheduler.Centre + ", epoch " + epoch);
+                desiredCentre = desired;
+                desiredSinceMs = nowMs;
+                desiredValid = true;
+            }
+
+            if (!desired.Equals(scheduler.Centre))
+            {
+                bool jumped = scheduler.HasCentre &&
+                              desired.WeightedDistanceTo(scheduler.Centre) > JumpDistance;
+                bool settled = nowMs - desiredSinceMs >= RecentreDelayMs;
+                if (!scheduler.HasCentre || jumped || settled)
+                {
+                    scheduler.SetCentre(desired.X, desired.Y, desired.Z);
+                    epoch++;
+                    pendingValid = false;
+                    link.SendVoxelClear(epoch);
+                    log("[MinecraftInRepo] collision: recentred on region " + scheduler.Centre +
+                        " (jumped=" + jumped + "), epoch " + epoch);
+                }
             }
 
             watch.Reset();

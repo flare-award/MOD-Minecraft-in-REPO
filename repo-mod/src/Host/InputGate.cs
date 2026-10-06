@@ -27,7 +27,12 @@ namespace MinecraftInRepo.Host
 
         private bool loggedZeroing;
 
-        public void Update(object controller, object toolController)
+        /// <summary>
+        /// Zero the host's movement every frame the body follows the guest.
+        /// <paramref name="allowInteract"/> is false in HostMenu, where the
+        /// reserved key belongs to the host's window.
+        /// </summary>
+        public void Update(object controller, object toolController, bool allowInteract)
         {
             if (controller != null)
             {
@@ -51,7 +56,7 @@ namespace MinecraftInRepo.Host
             if (toolController != null)
             {
                 // Written after the host's own Update read it, so it lands next frame.
-                api.SetInstanceValue(toolController, "InteractInput", InteractHeld);
+                api.SetInstanceValue(toolController, "InteractInput", allowInteract && InteractHeld);
             }
         }
 

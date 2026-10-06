@@ -137,6 +137,8 @@ namespace MinecraftInRepo.Host
             return false;
         }
 
+        private bool menuProbed;
+
         private bool ReadMenu()
         {
             object menu = api.StaticValue("MenuManager", "instance");
@@ -144,7 +146,55 @@ namespace MinecraftInRepo.Host
             {
                 return false;
             }
-            return api.InstanceValue(menu, "currentMenuPage") != null;
+
+            object page = api.InstanceValue(menu, "currentMenuPage");
+            object state = api.InstanceValue(menu, "currentMenuState");
+            string stateName = state == null ? null : state.ToString();
+
+            // A closed page is an inactive object in R.E.P.O.; the state enum
+            // (Closed / Open / ...) is the second opinion. When neither is
+            // readable we say "closed": stealing the body on a false positive is
+            // far worse than missing a menu.
+            bool active = false;
+            object activeSelf = PageActiveSelf(page);
+            if (activeSelf is bool)
+            {
+                active = (bool)activeSelf;
+            }
+
+            bool open = active && (string.IsNullOrEmpty(stateName) ||
+                                   stateName.IndexOf("Clos", StringComparison.OrdinalIgnoreCase) < 0);
+
+            if (!menuProbed && page != null)
+            {
+                menuProbed = true;
+                log("[MinecraftInRepo] menu probe: page=" + page.GetType().Name +
+                    " activeSelf=" + activeSelf + " state=" + (stateName ?? "?") + " -> open=" + open);
+            }
+            return open;
+        }
+
+        private object PageActiveSelf(object page)
+        {
+            if (page == null)
+            {
+                return null;
+            }
+            object active = api.InstanceValue(page, "activeSelf");
+            if (active is bool)
+            {
+                return active;
+            }
+            object owner = api.InstanceValue(page, "gameObject");
+            if (owner != null)
+            {
+                active = api.InstanceValue(owner, "activeSelf");
+                if (active is bool)
+                {
+                    return active;
+                }
+            }
+            return null;
         }
     }
 }
