@@ -60,7 +60,12 @@ namespace ApiDump
             // patch-point list - the five host patch points of the porting guide.
             string rawGrep = args.Length > 4 ? args[4] : null;
             string[] greps;
-            if (string.IsNullOrEmpty(rawGrep) || rawGrep == "patchpoints")
+            // "none" (or an empty argument) for the grep as well: type dump only.
+            if (rawGrep == "none")
+            {
+                greps = new string[0];
+            }
+            else if (string.IsNullOrEmpty(rawGrep) || rawGrep == "patchpoints")
             {
                 greps = DefaultGrep.Split(';');
             }
