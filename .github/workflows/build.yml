@@ -114,5 +114,5 @@ jobs:
       - name: Smoke test - dump the stub assembly's API surface
         run: |
           dotnet run --project tools/ApiDump/ApiDump.csproj -c Release --no-build -- \
-            repo-mod/libs/stubs "$RUNNER_TEMP/REPO-NOTES-SAMPLE.md" Assembly-CSharp.dll "Plugin;Player;Camera"
+            repo-mod/libs/stubs "$RUNNER_TEMP/REPO-NOTES-SAMPLE.md" Assembly-CSharp.dll "Plugin;Player;Camera" "Camera;Player" 10
           head -20 "$RUNNER_TEMP/REPO-NOTES-SAMPLE.md"

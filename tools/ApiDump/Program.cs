@@ -18,6 +18,12 @@ namespace ApiDump
 {
     internal static class Program
     {
+        // The five host patch points of the porting guide, in member-name form.
+        private const string DefaultGrep =
+            "Hurt;Damage;Death;Respawn;Revive;Kill;Input;Move;Movement;Jump;Sprint;Crouch;Sneak;" +
+            "Interact;Grab;Cursor;Sensitivity;Camera;ThirdPerson;FieldOfView;Fov;Freeze;Pause;" +
+            "Loading;Cutscene;Velocity;Grounded;Kinematic";
+
         private const string DefaultKeywords =
             "Player;Input;Camera;Controller;Avatar;Health;PhysGrab;Grab;Item;Valuable;Enemy;" +
             "SemiFunc;RunManager;LevelGenerator;Hurt;Damage;Death;Respawn;Chat;Menu;Hud;HUD;" +
@@ -27,7 +33,7 @@ namespace ApiDump
         {
             if (args.Length < 2)
             {
-                Console.Error.WriteLine("usage: ApiDump <managedDir> <outFile> [assembly.dll] [\"kw1;kw2;...\"]");
+                Console.Error.WriteLine("usage: ApiDump <managedDir> <outFile> [assembly.dll] [\"kw1;kw2;...\"] [\"grep1;grep2;...\"] [maxTypes]");
                 return 2;
             }
 
@@ -39,6 +45,24 @@ namespace ApiDump
                 .Select(k => k.Trim())
                 .Where(k => k.Length > 0)
                 .ToArray();
+
+            // Grep mode: list only the members whose names match, grouped by pattern.
+            // This is the file that actually answers "where do I patch input?".
+            string[] greps = (args.Length > 4 && args[4].Length > 0 ? args[4] : "")
+                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(k => k.Trim())
+                .Where(k => k.Length > 0)
+                .ToArray();
+            if (greps.Length == 0 && args.Length > 4 && args[4] == "patchpoints")
+            {
+                greps = DefaultGrep.Split(';');
+            }
+
+            int maxTypes = 0;
+            if (args.Length > 5)
+            {
+                int.TryParse(args[5], out maxTypes);
+            }
 
             string path = Path.Combine(managedDir, assemblyFile);
             if (!File.Exists(path))
@@ -150,12 +174,95 @@ namespace ApiDump
                     report.Append(section.Item2);
                 }
 
+                if (greps.Length > 0)
+                {
+                    report.Append("# Patch-point grep");
+                    report.AppendLine();
+                    report.AppendLine();
+                    report.AppendLine("Member names searched: " + string.Join(", ", greps));
+                    report.AppendLine();
+                    report.AppendLine();
+                    foreach (string grep in greps)
+                    {
+                        report.Append(Grep(md, handles, grep, 40));
+                    }
+                }
+
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outFile)));
                 File.WriteAllText(outFile, report.ToString());
                 Console.WriteLine("wrote " + Path.GetFullPath(outFile) + " (" + sections.Count + " types)");
             }
 
             return 0;
+        }
+
+        /// <summary>Lists every type that has a member whose name contains <paramref name="grep"/>.</summary>
+        private static string Grep(MetadataReader md, List<TypeDefinitionHandle> handles, string grep, int maxTypes)
+        {
+            StringBuilder output = new StringBuilder();
+            List<Tuple<string, List<string>>> hits = new List<Tuple<string, List<string>>>();
+
+            foreach (TypeDefinitionHandle handle in handles)
+            {
+                TypeDefinition type = md.GetTypeDefinition(handle);
+                string ns = md.GetString(type.Namespace);
+                string name = md.GetString(type.Name);
+                string full = string.IsNullOrEmpty(ns) ? name : ns + "." + name;
+
+                List<string> members = new List<string>();
+                foreach (MethodDefinitionHandle methodHandle in type.GetMethods())
+                {
+                    MethodDefinition method = md.GetMethodDefinition(methodHandle);
+                    string methodName = md.GetString(method.Name);
+                    if (methodName.IndexOf(grep, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        members.Add("    method " + MethodFlags(method.Attributes) + methodName +
+                                    "/" + method.GetParameters().Count);
+                    }
+                }
+                foreach (FieldDefinitionHandle fieldHandle in type.GetFields())
+                {
+                    FieldDefinition field = md.GetFieldDefinition(fieldHandle);
+                    string fieldName = md.GetString(field.Name);
+                    if (fieldName.IndexOf(grep, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        members.Add("    field  " + FieldFlags(field.Attributes) + fieldName);
+                    }
+                }
+                foreach (PropertyDefinitionHandle propertyHandle in type.GetProperties())
+                {
+                    PropertyDefinition property = md.GetPropertyDefinition(propertyHandle);
+                    string propertyName = md.GetString(property.Name);
+                    if (propertyName.IndexOf(grep, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        members.Add("    prop   " + propertyName + PropertyAccessors(md, property));
+                    }
+                }
+
+                if (members.Count > 0)
+                {
+                    hits.Add(Tuple.Create(full, members));
+                }
+            }
+
+            hits.Sort((a, b) => string.CompareOrdinal(a.Item1, b.Item1));
+            output.AppendLine("## \"" + grep + "\" - " + hits.Count + " types");
+            output.AppendLine();
+            int shown = maxTypes > 0 ? Math.Min(maxTypes, hits.Count) : hits.Count;
+            for (int i = 0; i < shown; i++)
+            {
+                output.AppendLine("- `" + hits[i].Item1 + "`");
+                foreach (string member in hits[i].Item2)
+                {
+                    output.AppendLine(member);
+                }
+            }
+            if (shown < hits.Count)
+            {
+                output.AppendLine("- ... " + (hits.Count - shown) + " more types, raise maxTypes to see them");
+            }
+            output.AppendLine();
+            return output.ToString();
         }
 
         private static string BaseName(MetadataReader md, EntityHandle handle)

@@ -1,26 +1,10 @@
-# Dumps the R.E.P.O. API surface (Assembly-CSharp.dll) into docs/REPO-NOTES.md.
-#
-# This is the "decompile first" step of the host/guest redesign (PeakCraft-style
-# architecture): the plugin patches the game's own input sampler, movement step,
-# camera update, hazard funnel and death, and those can only be found by reading
-# the real assembly. The dump lists type names, member names and arities only -
-# no game code is decompiled or redistributed.
-#
-# Usage (PowerShell, Windows):
-#   .\scripts\dump-repo-api.ps1
-#   .\scripts\dump-repo-api.ps1 -RepoGameDir "E:\Program files\Steam\steamapps\common\REPO"
-#   .\scripts\dump-repo-api.ps1 -Keywords "PlayerController;PlayerAvatar;Input;Camera;PhysGrab"
-#
-# Requires: .NET SDK 8 or newer (the tool targets net8.0; the SDK downloads the
-# net8.0 reference pack from nuget.org on first build).
-#
-# Send the produced docs/REPO-NOTES.md to the agent - it is the input for the
-# patch-point table in docs/PLAN-HOST-GUEST-RU.md.
-
 param(
     [string]$RepoGameDir = $env:REPO_GAME_DIR,
     [string]$Out,
-    [string]$Keywords
+    [string]$Keywords,
+    [string]$Grep = "patchpoints",
+    [int]$MaxTypes = 40,
+    [switch]$Full
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,6 +38,10 @@ if (-not (Test-Path $assembly)) {
     throw "Assembly-CSharp.dll not found under '$managed'. Set -RepoGameDir to the folder that contains REPO_Data."
 }
 
+# Without -Full we only run the patch-point grep, which stays small enough to
+# paste into a chat. -Full also dumps every type matching the keyword list.
+if (-not $Full) { $Keywords = "" }
+
 Write-Host "Game     : $RepoGameDir" -ForegroundColor Cyan
 Write-Host "Assembly : $assembly" -ForegroundColor Cyan
 Write-Host "Output   : $Out" -ForegroundColor Cyan
@@ -71,12 +59,18 @@ try {
     throw
 }
 
-if ($Keywords) {
-    dotnet run --project $tool -c Release --no-build -- "$managed" "$Out" "Assembly-CSharp.dll" "$Keywords"
-} else {
-    dotnet run --project $tool -c Release --no-build -- "$managed" "$Out" "Assembly-CSharp.dll"
-}
+dotnet run --project $tool -c Release --no-build -- "$managed" "$Out" "Assembly-CSharp.dll" "$Keywords" "$Grep" "$MaxTypes"
 if ($LASTEXITCODE -ne 0) { throw "ApiDump failed ($LASTEXITCODE)" }
 
+$size = (Get-Item $Out).Length
 Write-Host ""
-Write-Host "Done. Send '$Out' to the agent (or attach it in chat)." -ForegroundColor Green
+Write-Host "Wrote $Out ($([math]::Round($size / 1KB, 1)) KB)." -ForegroundColor Green
+if ($size -lt 200KB) {
+    Write-Host "Small enough to paste: open it and copy the text into the chat." -ForegroundColor Green
+} else {
+    Write-Host "Too big to paste - send it by committing it to the branch:" -ForegroundColor Yellow
+    Write-Host "  git add docs/REPO-NOTES.md" -ForegroundColor Yellow
+    Write-Host "  git commit -m 'REPO API notes'" -ForegroundColor Yellow
+    Write-Host "  git push origin arena/01a10290-mod-minecraft-in-repo" -ForegroundColor Yellow
+    Write-Host "or attach the file in chat if the UI allows it." -ForegroundColor Yellow
+}
