@@ -58,7 +58,7 @@ namespace MinecraftInRepo.Host
 
         private Vector3 eyeMcToRepo(GuestState guest)
         {
-            return map.McToRepo(new Vector3(guest.X, guest.Y + guest.EyeHeight, guest.Z));
+            return map.McToRepo(new Vector3((float)guest.X, (float)guest.Y + guest.EyeHeight, (float)guest.Z));
         }
 
         /// <summary>Minecraft's conventions: yaw 0 looks along +Z, pitch positive is downwards.</summary>

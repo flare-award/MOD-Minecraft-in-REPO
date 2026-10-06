@@ -77,7 +77,7 @@ namespace MinecraftInRepo
             // during chainloader startup - it is guaranteed to be ticked by
             // Unity, so Update/OnGUI/coroutines actually run.
             GameObject host = gameObject;
-            Object.DontDestroyOnLoad(host);
+            UnityEngine.Object.DontDestroyOnLoad(host);
 
             gate = host.AddComponent<PlayModeGate>();
             gate.Init(config, Logger);
@@ -187,11 +187,11 @@ namespace MinecraftInRepo
             if (driver != null)
             {
                 // Created but never ticked - try once more on a fresh object.
-                Object.Destroy(driver.gameObject);
+                UnityEngine.Object.Destroy(driver.gameObject);
                 driver = null;
             }
             GameObject go = new GameObject("MinecraftInRepo_Driver");
-            Object.DontDestroyOnLoad(go);
+            UnityEngine.Object.DontDestroyOnLoad(go);
             driver = go.AddComponent<ModDriver>();
             driver.Init(this);
             Logger.LogInfo("[MinecraftInRepo] Driver component created (scene=" + go.scene.name + ").");

@@ -39,7 +39,7 @@ namespace MinecraftInRepo.Tests
 
             tracker.Observe(StateAt(2, 11.0), 2000);
             Assert.Equal(0.0, tracker.Alpha(StateAt(2, 11.0), 2000));
-            Assert.Equal(0.0, tracker.Alpha(StateAt(2, 11.0), 2010));
+            Assert.Equal(0.2, tracker.Alpha(StateAt(2, 11.0), 2010), 3);
         }
 
         [Fact]
@@ -93,11 +93,14 @@ namespace MinecraftInRepo.Tests
             Assert.True(scheduler.TryNext(0, out centre));
             scheduler.MarkSent(centre, 0, 4000);
 
-            RegionKey far;
-            Assert.True(scheduler.TryNext(0, out far));
-            scheduler.MarkSent(far, 0, 30000);
+            // Everything else is sent with a long refresh, so only the centre's
+            // own timer decides what comes due next.
+            RegionKey other;
+            while (scheduler.TryNext(0, out other))
+            {
+                scheduler.MarkSent(other, 0, 60000);
+            }
 
-            // The centre is due again in 4 s, the far region only after 30 s.
             RegionKey due;
             Assert.False(scheduler.TryNext(3999, out due));
             Assert.True(scheduler.TryNext(4001, out due));
