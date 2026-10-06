@@ -1,368 +1,185 @@
-# Minecraft in R.E.P.O.
+# Перестройка мода: Minecraft как персонаж внутри R.E.P.O. (архитектура host/guest)
 
-*[Русская версия: справочник [README-RU.md](README-RU.md) и пошаговый туториал
-[TUTORIAL-RU.md](TUTORIAL-RU.md) — Russian guide and start-to-finish
-walkthrough, from installation to the first TNT blast]*
+Документ описывает, **что** и **в каком порядке** мы меняем. Образец — [PeakCraft](https://github.com/aeironnsarmiento/PeakCraft)
+(тот же приём, что и SkyCraft: Minecraft внутри PEAK/Skyrim).
 
-**Put real Minecraft inside R.E.P.O.** Minecraft's camera follows the R.E.P.O.
-camera, the live Minecraft window is rendered inside the game, and TNT you
-detonate in Minecraft blows up R.E.P.O.'s enemies, items, valuables — and your
-own crew.
+## 1. Что не так с текущей версией
 
-Two games, one shared world:
+Сейчас мод работает в режиме **«наблюдателя»**: R.E.P.O. владеет телом, а Minecraft — это
+картинка на экране, камера которой следует за камерой R.E.P.O.
 
-```
-+--------------------------+        TCP 127.0.0.1:47621        +--------------------------+
-|        R.E.P.O.          |  -------------------------------  |        Minecraft         |
-|  (BepInEx plugin)        |   camera pose  (60 Hz)            |  (Fabric mod, 1.21.1)    |
-|                          |  ------------------------------>  |                          |
-|  MinecraftInRepo.dll     |   explosions   (event lines)      |  mcrepo-1.1.0.jar        |
-|  - window capture        |  <------------------------------- |  - moves the player to   |
-|  - in-game overlay       |                                   |    the R.E.P.O. camera   |
-|  - blast damage          |                                   |  - reports every boom    |
-+--------------------------+                                   +--------------------------+
-```
+Нужно наоборот:
 
-## Features
-
-- **Real Minecraft inside R.E.P.O.** — the actual Minecraft window is captured
-  (PrintWindow/BitBlt) and drawn as a ghost overlay or picture-in-picture.
-- **Camera follow** — the R.E.P.O. camera pose is streamed to Minecraft, which
-  moves its player to match (smoothed per render frame, with corrections
-  suppressed). FOV is synced too.
-- **TNT that matters** — explosions in Minecraft (TNT, creepers, beds, end
-  crystals) are mapped back into R.E.P.O. world space and damage
-  `EnemyHealth`, `PlayerHealth`, and fling/shatter items & valuables through
-  the game's own physics and destruction paths.
-- **One-key calibration (F7)** — stand somewhere, press F7, and the mod
-  computes the rotation/translation between the two worlds from the two
-  cameras' current poses.
-- No Harmony patches of game code, no fabric-api dependency, no asset bundles:
-  everything is additive, and the bridge is loopback-only.
-- **Solo-first.** Singleplayer is the supported mode: the R.E.P.O. plugin idles
-  completely as soon as it detects a multiplayer session (`General.SinglePlayerOnly`
-  defaults to `true`), so co-op stays vanilla-clean instead of half-working.
-  Minecraft gets three solo-friendly tweaks for free: no auto-pause when its
-  window loses focus, the integrated server's player copy follows the camera
-  (so TNT far from spawn still ticks and explodes), and creative flight without
-  needing cheats.
-
-## Requirements
-
-| Side | What |
-|---|---|
-| R.E.P.O. | Windows install + [BepInEx 5.4.23.x](https://thunderstore.io/c/repo/p/BepInEx/BepInExPack/) |
-| Minecraft | Minecraft **1.21.1** with [Fabric loader](https://fabricmc.net/use/) (any Fabric profile/installation) |
-| Both | The two files from this repo's [Releases/CI artifacts](#building-from-source) |
-
-> Play fair: use this in your own singleplayer runs or with friends who are in
-> on it. The mod changes PvE co-op gameplay; it is not a tool for messing with
-> strangers' sessions.
-
-## Install
-
-### 1. R.E.P.O. side
-
-1. Install BepInEx for R.E.P.O. (r2modman/Gale or manually — see the
-   [R.E.P.O. Modding Wiki](https://repomods.com/)).
-2. Copy `MinecraftInRepo.dll` into `R.E.P.O.\BepInEx\plugins\`.
-
-### 2. Minecraft side
-
-1. Create a Fabric installation for **Minecraft 1.21.1** in the official
-   launcher (or use any Fabric-capable launcher).
-2. Drop `mcrepo-1.1.0.jar` into that installation's `mods` folder.
-   No other mods are required (fabric-api is *not* needed).
-3. Launch it. The log line `Bridge listening on 127.0.0.1:47621` means it's
-   ready. Create/load any **singleplayer** world — a superflat world makes a
-   great "voxel twin" stage for your R.E.P.O. levels. Cheats are not required.
-
-### 3. Play
-
-1. Start R.E.P.O. (modded). Once Minecraft is running, the status line in the
-   bottom-left corner says `[Minecraft] linked` and the overlay appears.
-2. In a level, stand where you want the two worlds to line up, look in a
-   meaningful direction, and press **F7** once. This stores the alignment in
-   `BepInEx\config\MinecraftInRepo.cfg`.
-3. Light some TNT in Minecraft. Watch R.E.P.O. pay for it.
-
-If the overlay shows the Minecraft menu instead of the world, hit Play on your
-Fabric profile — the capture follows whatever window is titled "Minecraft*".
-
-## Hotkeys
-
-| Key | Action |
-|---|---|
-| F6 | Toggle camera follow (Minecraft camera follows R.E.P.O.) |
-| F7 | Calibrate: align the two worlds at your current position/look direction |
-| F8 | Cycle overlay: FullScreen ghost → PiP → Off |
-| F9 | Toggle explosion damage in R.E.P.O. |
-
-## Configuration
-
-### R.E.P.O. — `BepInEx/config/MinecraftInRepo.cfg`
-
-| Section.Key | Default | Meaning |
+| | Сейчас (наблюдатель) | Нужно (host/guest) |
 |---|---|---|
-| General.SinglePlayerOnly | true | Idle completely in multiplayer sessions (solo is the supported mode) |
-| Net.Port | 47621 | Bridge TCP port (must match the Minecraft mod) |
-| Net.SendRateHz | 60 | Camera pose update rate |
-| Overlay.Mode | FullScreen | Off / FullScreen / PiP (F8) |
-| Overlay.Alpha | 0.35 | Ghost overlay opacity |
-| Overlay.CaptureFps | 30 | Window capture rate |
-| Camera.FollowEnabled | true | Camera follow (F6) |
-| Camera.AlignmentYawDeg | 0 | World alignment yaw (set by F7) |
-| Map.McOrigin* / Map.RepoAnchor* | 0 | Mapping anchors (set by F7) |
-| Map.Scale | 1.0 | R.E.P.O. meters per Minecraft block |
-| HostGuest.Enabled | false | EXPERIMENTAL: protocol v2 link — Minecraft owns the player's body ([docs/PLAN-HOST-GUEST-RU.md](docs/PLAN-HOST-GUEST-RU.md)). Off = the classic camera-follow mod. |
-| HostGuest.Port | 25671 | TCP port of the v2 guest link ([docs/PROTOCOL-V2.md](docs/PROTOCOL-V2.md)) |
-| Blast.RadiusPerPower | 1.5 | Blast radius = power × this (TNT power = 4) |
-| Blast.MaxEnemyDamage | 90 | Point-blank enemy damage |
-| Blast.MaxPlayerDamage | 45 | Point-blank player damage |
-| Blast.ItemForce | 14 | Physics impulse on items/valuables |
-| Blast.FriendlyFire | true | Your TNT can hurt your own crew |
-| Blast.DestroyValuables | true | Strong blasts shatter items/valuables |
-| Blast.DestroyThreshold | 0.55 | Blast falloff needed to shatter |
-| Blast.StunEnemies | true | Briefly stun blasted enemies |
+| Тело, физика, прыжок, спринт, крадущийся шаг | R.E.P.O. | **Minecraft** |
+| Камера | R.E.P.O., Minecraft повторяет | **Minecraft** (1-е лицо и F5), R.E.P.O. повторяет |
+| HUD, хотбар, инвентарь, чат, меню | R.E.P.O. | **Оба**: Minecraft рисует своё поверх картинки, R.E.P.O. — свои меню |
+| Мир, предметы, враги, урон | R.E.P.O. | R.E.P.O. (без изменений) |
+| Взаимодействие с объектами | клавиши R.E.P.O. | **Из тела Minecraft**, одной выделенной клавишей |
 
-### Minecraft — `config/mcrepo-bridge.json`
+## 2. Термины
 
-`enabled`, `port`, `bind`, `applyCamera`, `broadcastExplosions`, `syncFov`,
-`hideHud`, `requestCreativeMode`, `keepRunningWhenUnfocused`,
-`driveServerPlayerInSingleplayer`. Defaults are sensible; `port` must match
-`Net.Port` above.
+* **Guest (гость)** — скрытый Minecraft-клиент. Владеет физикой, инвентарём, HUD, экранами.
+* **Host (хозяин)** — R.E.P.O. Владеет миром, картинкой, окном, клавиатурой, предметами, меню.
+* **Host-плагин** — наш BepInEx-мод `MinecraftInRepo`.
+* **Link (связь)** — канал между играми + понимание, что вторая сторона жива (heartbeat).
+* **Ownership (владение)** — решение один раз за кадр, кто владеет телом/камерой/вводом/HUD.
+* **Follower (ведомый)** — персонаж R.E.P.O., пока телом владеет Minecraft: скрыт, не симулируется,
+  но каждый кадр переносится в позицию игрока Minecraft, чтобы триггеры, опасности и скрипты
+  R.E.P.O. продолжали работать.
+* **Overlay** — HUD и экраны Minecraft, наложенные поверх картинки R.E.P.O.
+* **Mirror World (зеркальный мир)** — пустой мир Minecraft, в котором стоят только блоки игрока,
+  а геометрия R.E.P.O. приходит как коллизии.
 
-The last two are the solo-play tweaks: `keepRunningWhenUnfocused` disables
-vanilla's "pause my singleplayer world when the window loses focus" while the
-bridge drives the camera (R.E.P.O. holds the focus), and
-`driveServerPlayerInSingleplayer` moves the integrated server's copy of the
-player to the R.E.P.O. camera so chunk simulation — and therefore your TNT —
-follows the shared view.
+## 3. Таблица владения
 
-## Multiplayer notes
+| Состояние | Движение хоста | Ввод хоста | Камера хоста | HUD хоста | Персонаж хоста виден | Overlay Minecraft |
+|---|---|---|---|---|---|---|
+| **HostOwns** (нет связи / нет персонажа) | да | да | да | да | да | нет |
+| **Handoff** (ждём подтверждения телепорта) | заморожено | нет | да | да | да | нет |
+| **GuestOwns** (обычная игра) | нет | нет | нет | нет | нет (Follower) | да |
+| **HostMenu** (меню R.E.P.O. открыто) | нет | да | нет | да | нет | да |
+| **Cutscene** (загрузка, смерть, скриптовое падение, концовка) | да | нет | да | да | да | да |
 
-**Default behaviour: the mod does nothing in multiplayer.** `General.SinglePlayerOnly`
-is `true`, so while R.E.P.O. reports an online session the plugin stops camera
-streaming, window capture / overlay and explosion routing entirely (the status
-line says `solo-only: multiplayer session detected - mod idle`). Nothing is
-synced, nothing can desync somebody else's game.
+Правила:
 
-If you deliberately want it in co-op, set `General.SinglePlayerOnly = false`
-and **run it as the host**: R.E.P.O. syncs health from the master client, so
-enemy/player/item damage is applied host-authoritatively (the same pattern the
-game's own damage uses). Non-host clients get the overlay, camera follow, blast
-flash and local knockback, but no shared damage. Expect rough edges — solo is
-the supported mode.
+1. Состояние решается **один раз за кадр, в одной функции**; модули спрашивают «тело следует за
+   гостем?» — а не «что сейчас делает хост?».
+2. **Потеря связи = HostOwns.** Возврат всех систем в одном переходе и делает падение Minecraft
+   безопасным: вы просто снова играете в R.E.P.O.
+3. Рукопожатие телепорта: хост публикует позицию и увеличивает `teleportSeq`, ждёт `teleportAck`,
+   и только потом скрывает персонажа. Без этого тело «прыгает» туда, где игрок Minecraft оказался.
 
-## Troubleshooting
+## 4. Отличия от PeakCraft (наши упрощения)
 
-- **"not connected"** — Minecraft isn't running, isn't on 1.21.1 Fabric with
-  the mod, or `port` mismatches. Check Minecraft's `latest.log` for
-  `Bridge listening on 127.0.0.1:47621`.
-- **Overlay is black** — some GPU/window-manager combinations refuse
-  off-screen GDI capture of OpenGL windows. Keep the Minecraft window visible
-  (e.g. second monitor, or snapped beside R.E.P.O. in windowed mode); the
-  BitBlt fallback captures anything visible.
-- **Minecraft view drifts/rubber-bands** — the optional
-  `IgnorePositionCorrectionMixin` didn't apply (check `latest.log` for mixin
-  warnings). Re-calibrate with F7; on a new game version the mixin targets may
-  need updating (see `docs/ARCHITECTURE.md`).
-- **Worlds rotated oddly after F7** — calibrate while looking along a clear
-  horizontal direction (not straight up/down), then re-check.
-- **No damage in multiplayer** — `General.SinglePlayerOnly` is `true` (default),
-  or you're not the host (see "Multiplayer notes" above).
-- **Minecraft freezes while I play R.E.P.O.** — vanilla pauses a singleplayer
-  world when the Minecraft window loses focus. Keep
-  `keepRunningWhenUnfocused = true`, or press `F3 + P` / set
-  `pauseOnLostFocus:false` in `options.txt`.
-- **TNT just sits there and never explodes** — TNT only ticks inside simulated
-  chunks. Keep `driveServerPlayerInSingleplayer = true` (default) so simulation
-  follows the camera, and/or raise "Simulation Distance" in Minecraft's video
-  settings.
+| У PeakCraft | У нас | Почему |
+|---|---|---|
+| Общая память Windows (`Local\SkyCraft_v1`, ~191 МБ), seqlock-слоты, ring-буферы | Оставляем loopback TCP с построчным JSON | Канал уже работает и отлажен; объёмы на порядок меньше — мы не передаём альфа-кадры и геометрию |
+| Overlay как RGBA-кадры через triple buffer | Захват окна Minecraft (как сейчас) + **хрома-маска по цвету неба** | Дешевле в реализации; платим отсутствием попиксельной прозрачности (см. ограничения) |
+| Коллизии: точные треугольники (Havok) или перестроение поверхностей из рейкастов | **Воксельная сетка** (шаг 0.5 блока) → невидимые барьер-блоки в зеркальном мире | Даёт «честную» физику Minecraft (края, выступы, стены) ценой детализации; кода на порядок меньше |
+| Minecraft 26.x, Java 25, FFM (`--enable-native-access`) | Остаёмся на **1.21.1 / Java 21** | Раз нет общей памяти, FFM не нужен; у пользователя всё уже установлено |
+| Пять патч-классов на шесть методов | Ожидаем 4–5 патчей (см. §6) | R.E.P.O. — Unity+BepInEx, funnel-методы находим по `docs/REPO-NOTES.md` |
 
-## Building from source
+## 5. Что делает Minecraft (guest), что делает R.E.P.O. (host)
 
-You need two toolchains — or none at all:
+**Guest (Minecraft, Fabric-мод):**
 
-| Side | Toolchain |
+* держит игрока в пустом зеркальном мире: физика, гравитация, прыжок, спринт, крадущийся шаг,
+  полёт в креативе, урон, смерть, инвентарь, хотбар, чат, экраны;
+* принимает от хоста: ввод (клавиши/мышь/текст/курсор), коллизии (воксели), урон, команды
+  (телепорт, «отпустить всё», «открыто меню хоста»), предметы из R.E.P.O.;
+* отдаёт хосту: позицию последних двух тиков + время (для интерполяции), yaw/pitch, высоту глаз,
+  режим камеры и дистанцию (F5), FOV, здоровье, смерть/возрождение, состояние инвентаря,
+  «экран открыт/закрыт»;
+* применяет коллизии как барьер-блоки: хост говорит «тут твёрдо» — гость ставит невидимый блок
+  (через интегрированный сервер, `setBlock`), и Minecraft сам считает физику.
+
+**Host (R.E.P.O., плагин MinecraftInRepo):**
+
+* рейкастит геометрию вокруг игрока и шлёт воксели;
+* пишет позицию гостя в камеру и в Follower'а;
+* перехватывает ввод игры и отключает её собственное управление, когда телом владеет гость;
+* отдаёт гостю ввод и команды, принимает позу/здоровье/события;
+* одна выделенная клавиша взаимодействия (G): включает нативное «interact» R.E.P.O. с камерой
+  гостя, рисует свою подсказку, а подобранные ценности уходят в Minecraft как предметы;
+* урон: перехватывает единую функцию опасности и превращает её в событие «hurt» для гостя
+  (не чаще раза в 0.5 с); смерть гостя запускает смерть R.E.P.O.;
+* рисует overlay и подсказку; скрывает HUD R.E.P.O., пока телом владеет гость.
+
+## 6. Порядок работ (каждая фаза играбельна сама по себе)
+
+| # | Фаза | Готово, когда |
+|---|---|---|
+| **0** | Разведка: `scripts/dump-repo-api.ps1` → `docs/REPO-NOTES.md`, таблица точек патча (ввод, движение, камера, опасность, смерть, порядок обновления кадров) | **Готово**: `docs/REPO-PATCH-POINTS.md` |
+| **1** | Связь v2 + ownership: новые сообщения протокола, машина состояний, heartbeat, «фейковый гость» (`tools/fake_guest.py`) для проверки | **Готово**: `docs/PROTOCOL-V2.md`, 33 теста в `tests/HostTests` |
+| **2** | Координаты + коллизии + Follower: масштаб, оси, yaw, высота ног; экспорт вокселей; персонаж R.E.P.O. скрыт и следует за гостем | **Код готов** (`CollisionExport`, `BodyFollower`): проверяется с фейковым гостем; точная высота ног калибруется по логу `feet=` |
+| **3** | Камера + ввод: запись позы в камеру R.E.P.O. после её собственного обновления, проброс клавиш/мыши, отключение управления R.E.P.O. | **Хост готов** (`CameraDriver`, `InputGate`, `HealthBridge`); осталась гостевая часть (Fabric): приём ввода и барьер-блоки |
+| **4** | Overlay + HUD: захват окна с маской по цвету неба, скрытие HUD R.E.P.O., курсор в экранах Minecraft | Видны хотбар, сердечки, инвентарь, чат, меню |
+| **5** | Взаимодействие: клавиша G, подсказка, подбор ценностей → предметы в инвентаре Minecraft, меню R.E.P.O. (грузовик, терминал, магазин) из тела Minecraft | Можно подобрать ценность и купить улучшение, не выходя из Minecraft |
+| **6** | Урон и смерть: опасности R.E.P.O. → сердечки Minecraft, смерть гостя → смерть R.E.P.O., автоподнятие по «Respawn» | Выживание согласовано; в креативе опасности просто выключены |
+| **7** | Полировка: паузы (Esc/O), катсцены, логи по одной строке в секунду, установка в чистый профиль, честный README | Играется как игра |
+
+## 7. Клавиши (итоговая раскладка)
+
+| Клавиша | Действие |
 |---|---|
-| R.E.P.O. plugin | [.NET SDK 8+](https://dotnet.microsoft.com/download) (`dotnet` in PATH) |
-| Minecraft mod | **JDK 25+** — *not* 21: Fabric Loom 1.18 refuses to run Gradle on Java 21 (`Dependency requires at least JVM runtime version 25`). The mod itself still compiles to Java 21 bytecode. Install: `winget install -e --id EclipseAdoptium.Temurin.25.JDK` or https://adoptium.net/temurin/releases/?version=25 |
-| neither | Download the prebuilt files from GitHub Actions instead (see below) |
+| `W/A/S/D`, мышь, `Space`, `Shift`, `Ctrl`, `E`, `Q`, `1–9`, `T`, `F5` | Minecraft (всё, что не занято ниже) |
+| `G` | Взаимодействие с R.E.P.O.: взять/использовать предмет, открыть дверь, терминал, магазин |
+| `Esc` | Меню паузы R.E.P.O. (если открыт экран Minecraft — закрывает его) |
+| `O` | Пауза/настройки Minecraft |
+| `F6/F7/F8/F9` | Служебные: режим камеры, калибровка, overlay, маршрутизация TNT (остаются) |
 
-### Fastest: grab the CI artifacts
+## 8. Что нужно от игрока
 
-Every push builds both mods. With the [GitHub CLI](https://cli.github.com/):
+1. Запустить `.\scripts\dump-repo-api.ps1` и прислать `docs/REPO-NOTES.md` (это список типов и
+   методов `Assembly-CSharp.dll`, без кода игры) — без него патчить ввод и камеру нельзя.
+2. Одобрить порядок фаз (и можно сразу сказать, что важнее — движение, взаимодействие или картинка).
 
-```sh
-./scripts/fetch-builds.sh                     # -> ./dist  (Windows: .\scripts\fetch-builds.ps1)
-./scripts/fetch-builds.ps1 -RepoGameDir "C:\...\REPO" -MinecraftDir "$env:APPDATA\.minecraft" -Install
-```
+## 9. Заранее известные ограничения
 
-Or from the web: **Actions → build → latest successful run → Artifacts**
-(`MinecraftInRepo-gamelibs-build` for the R.E.P.O. DLL built against the real
-game assemblies, `mcrepo-fabric-mod` for the Minecraft jar).
+* Одиночная игра (singleplayer). Мультиплеер не поддерживается: мод бездействует в сетевой сессии.
+* Воксельные коллизии: предметы тоньше шага сетки (0.5 блока) проходятся насквозь, острые углы
+  скругляются, лестница из мелких выступов может быть проходимой.
+* Overlay через захват окна: прозрачность получается маской по цвету неба (нужен ресурс-пак с
+  однотонным небом), попиксельной альфы не будет; блоки Minecraft не освещаются светом R.E.P.O.
+  и не перекрываются геометрией R.E.P.O. по глубине — это цена отказа от общей памяти.
+* Пока телом владеет Minecraft, инвентарь и меню R.E.P.O. доступны только через клавишу `G` и `Esc`.
+* Minecraft запускается скрытым окном; переключение окна мышью не требуется и не поддерживается.
 
-### One-liner scripts
+## Session of 2026-10-05 (3): phases 0, 2 and 3 of the host side
 
-```powershell
-# Windows
-.\scripts\build-repo-mod.ps1 -RepoGameDir "C:\...\REPO" -Install
-.\scripts\build-mc-mod.ps1  -MinecraftDir "$env:APPDATA\.minecraft" -Install
-```
+The user ran the recon tool twice at the PC with the game installed, which
+unblocked everything below.
 
-```sh
-# Linux / macOS
-./scripts/build-repo-mod.sh "/path/to/REPO" --install
-./scripts/build-mc-mod.sh --minecraft-dir ~/.minecraft --install
-```
+### Phase 0: the notes file and the patch-point table
 
-### MinecraftInRepo.dll (R.E.P.O. plugin, C#)
+`docs/REPO-PATCH-POINTS.md` - the concern / class / member / why table the
+porting guide asks for, written from the two dumps:
 
-```sh
-# Offline / no game: build hand-written reference stubs, then the plugin
-dotnet build repo-mod/Stubs/StubAssemblies.csproj -c Release
-dotnet build repo-mod/MinecraftInRepo.csproj -c Release
+* update order: `FixedUpdate` (physics) → `Update` (input, camera aim) →
+  `LateUpdate` (camera smoothing) → `onBeforeRender` (**our pump**). Writing the
+  camera and zeroing the input from the render pump satisfies "after the host's
+  own camera update" without a single Harmony patch.
+* input gate: zero `PlayerController.InputDirection/InputDirectionRaw/sprinting/
+  Crouching/Crawling/Sliding/moving/JumpInputBuffer` every frame;
+* follower: `PlayerController.Kinematic(bool)`, move `PlayerAvatar.transform`,
+  force `CollisionGrounded`, hide via `PlayerAvatarVisuals.localVisibility` +
+  `ApplyLocalVisibilityBody()` (fallback: child renderers);
+* camera: `Camera.main.transform` + `fieldOfView`;
+* interact: `ToolController.InteractInput` from `G`;
+* damage: mirror `PlayerHealth.health` instead of patching `Hurt/4` (arity is all
+  the notes give us, and mirroring gets the same result);
+* cutscene: `GameDirector.currentState`/`DisableInput`, the `RunManager` flags,
+  `PlayerTumble.isTumbling`, `MenuManager.currentMenuPage`.
 
-# Against your real install (recommended for release builds):
-dotnet build repo-mod/MinecraftInRepo.csproj -c Release -p:RepoGameDir="C:\...\REPO"
+**Decision: no Harmony patches at all.** Every game member is reached through
+`RepoApi` (reflection by name, cached, with a once-per-session "host API check"
+line listing anything missing). That keeps the plugin compiling in stub mode,
+keeps CI honest, and makes a game update degrade one feature instead of breaking
+the game.
 
-# Against the community game-assemblies NuGet (what CI does):
-dotnet build repo-mod/MinecraftInRepo.csproj -c Release -p:UseGameLibsNuGet=true
-```
+### Phases 2 and 3 on the host
 
-The DLL lands in `repo-mod/bin/Release/`.
+* `Host/CollisionExport.cs` - half-block voxel regions streamed from ray casts.
+  Per column: cast down, take the hit as the top of a solid span, then cast again
+  from just inside it with `Physics.queriesHitBackfaces = true` to find the
+  underside, and fill the cells between. Budgeted at 2.5 ms a frame, nearest
+  region first, refreshed every 4 s near and 30 s far, and the epoch bumps
+  whenever the region under the player changes. Scheduling lives in the pure
+  `Host/RegionScheduler.cs` and is unit tested.
+* `Host/BodyFollower.cs` - take/give back the body, remembering exactly which
+  renderers it hid.
+* `Host/CameraDriver.cs` - eye position from the interpolated feet plus the
+  guest's eye height, yaw/pitch converted through the same alignment rotation the
+  coordinate map uses, FOV copied.
+* `Host/InputGate.cs` - the zeroing above, plus the reserved interact key.
+* `Host/HealthBridge.cs` - host hazards become one `hurt` event per 0.5 s, the
+  guest's health is written back so the host's death flow can only start when the
+  guest dies, and a guest death calls `PlayerHealth.Death()`.
+* `Host/GuestPose.cs` - `TickTracker` (interpolation alpha from the arrival time
+  on the host's own clock, because the two processes do not share one) and
+  `HealthScale`.
 
-### mcrepo jar (Minecraft, Java)
-
-```sh
-cd mc-mod
-./gradlew build      # gradle wrapper; needs JDK 25+ to RUN gradle
-# jar at build/libs/mcrepo-1.1.0.jar
-```
-
-The first run downloads Minecraft 1.21.1 plus Mojang's mappings and
-decompiles the game — it takes a while and needs a few GB of disk.
-
-**If Gradle says `Dependency requires at least JVM runtime version 25. This
-build uses a Java 21 JVM`** — install a JDK 25 and point Gradle at it:
-
-```powershell
-winget install -e --id EclipseAdoptium.Temurin.25.JDK      # once
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot"   # check the exact folder
-$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
-java -version      # must print 25 or newer
-cd mc-mod; .\gradlew build
-```
-
-`scripts/build-mc-mod.ps1` does all of that for you: it picks a JDK 25+ from
-`JAVA_HOME`, PATH or the usual install folders, and offers to install Temurin 25
-via winget if none is present. You can also pin it permanently with
-`org.gradle.java.home=C:\\Program Files\\Eclipse Adoptium\\jdk-25...` in
-`%USERPROFILE%\.gradle\gradle.properties`.
-
-CI (GitHub Actions) builds all three configurations on every push and uploads
-the artifacts — handy if you don't have the toolchains locally.
-
-## Repository layout
-
-```
-repo-mod/     BepInEx plugin (C#): bridge client, camera sync, coordinate map,
-              window capture, overlay, explosion router + API stubs for CI
-mc-mod/       Fabric mod (Java, MC 1.21.1): bridge server, camera follower,
-              explosion broadcaster (TNT + optional generic explosions)
-launcher/     One-click launcher scripts + paths.json
-scripts/      Build + artifact-fetch helpers for both mods
-docs/         ARCHITECTURE.md (protocol, math, damage pipeline, API sources)
-MODLOG.md     Development journal
-```
-
-## Credits & prior art
-
-- R.E.P.O. by semiwork; Minecraft by Mojang/Microsoft — mod your own copies.
-- API signatures verified against public mod sources:
-  [repo-live-control](https://github.com/jkieley/repo-live-control),
-  [ValuableParry](https://github.com/layfhaker/parry-mod),
-  [R.E.P.O Mod Library](https://github.com/Lillious-Networks/R.E.P.O-Mod-Library),
-  [REPOLib](https://github.com/ZehsTeam/REPOLib), and the
-  [R.E.P.O. Modding Wiki](https://repomods.com/).
-- Window-overlay technique inspired by classic "desktop capture into Unity"
-  projects.
-
-MIT licensed (see LICENSE / mc-mod/LICENSE).
-
-## Session of 2026-10-05 (2): the host/guest redesign, phase 1
-
-The user confirmed the observer build works ("работает") but said it is **not
-what he wanted**: he wants the PeakCraft architecture — the player *is* the
-Minecraft character inside R.E.P.O., walking with Minecraft physics, keeping
-Minecraft's HUD/hotbar/inventory, and interacting two-way with R.E.P.O. objects
-(valuables land in the R.E.P.O. inventory *and* show up as Minecraft items, R.E.P.O.
-menus open from the Minecraft body). Solo only, as before.
-
-### Study
-
-Cloned `aeironnsarmiento/PeakCraft` and read its `CONCEPTS.md` and
-`docs/PORTING-GUIDE.md` (the game-agnostic host-plugin guide behind SkyCraft and
-PeakCraft). Vocabulary adopted wholesale: *guest* (Minecraft: body, physics,
-inventory, HUD, blocks), *host* (R.E.P.O.: world, picture, window, keyboard),
-*link*, *ownership*, *follower*, *mirror world*. The guide's nine jobs and its
-ownership table became the phases in `docs/PLAN-HOST-GUEST-RU.md`.
-
-Deliberate differences from PeakCraft, to keep this buildable by one person:
-shared memory → the existing loopback TCP bridge; RGBA overlay frames → window
-capture; triangle collision → a half-block voxel grid the guest turns into
-invisible barrier blocks; Minecraft 26.x + FFM → stay on 1.21.1 (Java 21).
-
-### Phase 0: recon tooling
-
-`tools/ApiDump/` — a ~250-line dumper built on `System.Reflection.Metadata` (no
-NuGet restore, so it works on a machine with restricted network) that writes a
-markdown "notes file" of one managed assembly: type names, base type, field,
-property and method names with arities. `scripts/dump-repo-api.ps1` runs it
-against `REPO_Data/Managed/Assembly-CSharp.dll` and writes `docs/REPO-NOTES.md`.
-The porting guide is explicit that decompiling and writing a notes file comes
-before any patch, and the patch points for input, movement, camera, hazard and
-death cannot be chosen without it. The user will run it when he is at the PC
-with the game; the input/camera/hazard phases are blocked until then.
-
-### Phase 1: link v2 and ownership (this commit)
-
-- `docs/PROTOCOL-V2.md` — the full message set: `hs`/`gs` (host and guest state),
-  `key`/`mbtn`/`look`/`scroll`/`char`/`cursor`/`release` (input, GLFW codes),
-  `vox`/`voxclear` (8×8×8-block regions on a half-block grid, 512 bytes base64,
-  with a collision epoch), `hurt`, `cmd`, `ev`, and the unchanged v1 `boom`.
-- `repo-mod/src/Host/Ownership.cs` — the five states (HostOwns, Handoff,
-  GuestOwns, HostMenu, Cutscene), decided once per frame from six inputs, with
-  the derived questions modules are allowed to ask (`BodyFollows`,
-  `HostCameraActive`, `ReleaseGuestKeys`, …). Link loss is just HostOwns, which
-  is what makes a crashed guest safe.
-- `repo-mod/src/Host/{GuestState,HostState,VoxelRegion,GuestLink}.cs` — the
-  messages, the region bit packing, and the link itself (reader thread, polled
-  connect, 3 s guest timeout, no coroutines anywhere: R.E.P.O. does not deliver
-  MonoBehaviour messages to plugin components, see the previous entry).
-- `tools/fake_guest.py` — a guest that speaks the protocol without Minecraft:
-  walks a circle, answers teleports, takes damage, and can be killed or
-  disconnected from the keyboard. This is the guide's "fake guest", and it is
-  what makes the link and link-loss testable in minutes.
-- `tests/HostTests/` — 22 xunit tests over those files. They link the sources
-  straight out of `repo-mod/src`, so they run in CI with no game, no game
-  assemblies and no stubs: ownership priorities and transitions, message
-  parsing, tick interpolation, region bit packing, base64 round trips.
-- Wiring in `Plugin.cs` is behind `[HostGuest] Enabled = false`, so the shipped
-  observer behaviour is untouched. With it on, the plugin keeps the link,
-  publishes `hs` every frame and logs `hg: owner=… link=… ack=…` once a second.
-
-### CI
-
-Five jobs now: `host-tests` (new, runs the unit tests), the two R.E.P.O. plugin
-builds, the Fabric build and the ApiDump build. Getting the logs out of a failed
-job turned out to be impossible from the sandbox (`gh run view --log` and the
-logs blob both fail with EOF), so the test step now tees its output and re-emits
-the interesting lines as `::error::` annotations, which *are* readable through
-`GET /repos/…/check-runs/{id}/annotations`. That is how the one real bug of this
-session was found: `HostState.ToJson()` emitted `"t"` twice (message type and
-timestamp), so the guest could not tell the message type. The timestamp is now
-`"ms"`, matching the guest.
-
-Green run `37359867961`: all five jobs green (`host-tests` reports 22 passed).
+Green run: all five CI jobs green; `host-tests` covers ownership, the protocol
+messages, the region scheduler, tick interpolation and health scaling.
